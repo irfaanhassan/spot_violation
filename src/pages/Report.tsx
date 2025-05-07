@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { ArrowLeft, Camera, MapPin, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,35 @@ const Report = () => {
   const [description, setDescription] = useState("");
   const [numberPlate, setNumberPlate] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
   
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Load Google Maps script
+  useEffect(() => {
+    const loadGoogleMapsScript = () => {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAJZwzmilDdDMv0ogSAEBxPsJxcJMMNz-4&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        setMapLoaded(true);
+      };
+      document.head.appendChild(script);
+    };
+
+    loadGoogleMapsScript();
+
+    return () => {
+      // Clean up script if component unmounts before script loads
+      const script = document.querySelector('script[src*="maps.googleapis.com"]');
+      if (script) {
+        document.head.removeChild(script);
+      }
+    };
+  }, []);
 
   // Get user's location when component mounts
   useEffect(() => {
@@ -41,11 +67,21 @@ const Report = () => {
           const { latitude, longitude } = position.coords;
           setCoordinates({ lat: latitude, lng: longitude });
           
-          // Reverse geocoding to get address from coordinates (simplified)
-          setLocation(`Current Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-          
-          // In a real app, you would use a geocoding service like Google Maps API
-          // to convert these coordinates to a human-readable address
+          // If Google Maps is loaded, reverse geocode the coordinates
+          if (mapLoaded && window.google) {
+            const geocoder = new window.google.maps.Geocoder();
+            const latlng = { lat: latitude, lng: longitude };
+            
+            geocoder.geocode({ location: latlng }, (results, status) => {
+              if (status === "OK" && results?.[0]) {
+                setLocation(results[0].formatted_address);
+              } else {
+                setLocation(`Current Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+              }
+            });
+          } else {
+            setLocation(`Current Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          }
         },
         (error) => {
           console.error("Error getting location:", error);
@@ -55,7 +91,7 @@ const Report = () => {
     } else {
       setLocation("Geolocation not supported by this browser");
     }
-  }, []);
+  }, [mapLoaded]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -93,11 +129,25 @@ const Report = () => {
       if (photoFile) {
         const fileName = `${user.id}/${Date.now()}-${photoFile.name}`;
         
+        // Create the bucket if it doesn't exist
+        const { data: bucketExists } = await supabase.storage.getBucket('report_images');
+        if (!bucketExists) {
+          // Try to create the bucket
+          await supabase.storage.createBucket('report_images', {
+            public: true
+          });
+        }
+        
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('report_images')
-          .upload(fileName, photoFile);
+          .upload(fileName, photoFile, {
+            upsert: true
+          });
           
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          throw uploadError;
+        }
         
         // Get public URL for the uploaded image
         const { data: publicUrlData } = supabase.storage
@@ -120,7 +170,10 @@ const Report = () => {
         // Status and points will use default values
       });
       
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        throw insertError;
+      }
       
       toast({
         title: "Report submitted successfully!",
@@ -139,6 +192,51 @@ const Report = () => {
       setUploading(false);
     }
   };
+
+  // Generate a mini map preview component
+  const MapPreview = () => {
+    if (!coordinates || !mapLoaded) {
+      return (
+        <div className="flex items-center p-3 bg-muted rounded-lg">
+          <MapPin className="h-5 w-5 text-muted-foreground mr-2" />
+          <span className="text-sm">{location}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="h-32 w-full bg-muted rounded-lg overflow-hidden" id="map-preview">
+          {/* The map will be rendered here by Google Maps */}
+        </div>
+        <div className="flex items-center p-2 bg-muted/50 rounded-lg">
+          <MapPin className="h-4 w-4 text-muted-foreground mr-2" />
+          <span className="text-xs">{location}</span>
+        </div>
+      </div>
+    );
+  };
+
+  // Init map when coordinates and Google Maps are available
+  useEffect(() => {
+    if (coordinates && mapLoaded && window.google) {
+      const mapElement = document.getElementById('map-preview');
+      if (mapElement) {
+        const map = new window.google.maps.Map(mapElement, {
+          center: coordinates,
+          zoom: 15,
+          disableDefaultUI: true,
+          zoomControl: false,
+          mapTypeControl: false,
+        });
+        
+        new window.google.maps.Marker({
+          position: coordinates,
+          map,
+        });
+      }
+    }
+  }, [coordinates, mapLoaded, step]);
 
   return (
     <div className="px-4 py-6 pb-20">
@@ -209,10 +307,7 @@ const Report = () => {
             )}
           </div>
 
-          <div className="flex items-center p-3 bg-muted rounded-lg">
-            <MapPin className="h-5 w-5 text-muted-foreground mr-2" />
-            <span className="text-sm">{location}</span>
-          </div>
+          <MapPreview />
 
           <Button 
             className="w-full" 

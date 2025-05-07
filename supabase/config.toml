@@ -3,3 +3,6 @@ project_id = "mnwqhmlvtjttltzyoypy"
 
 [functions.detect-plate]
 verify_jwt = true
+
+[storage.report_images]
+public = true
