@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { ArrowLeft, Camera, MapPin, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,13 +15,16 @@ import { toast } from "sonner";
 import { Constants } from "@/integrations/supabase/types";
 const violationTypes = Constants.public.Enums.violation_type;
 
+// Define a type for violationType based on the available options
+type ViolationType = typeof violationTypes[number];
+
 const Report = () => {
   const [step, setStep] = useState(1);
   const [photo, setPhoto] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [location, setLocation] = useState("Getting your location...");
   const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
-  const [violationType, setViolationType] = useState<"No Helmet" | "Wrong-side Driving" | "Signal Jump" | "Triple Riding" | "Overloading" | "Others">("No Helmet");
+  const [violationType, setViolationType] = useState<ViolationType>("No Helmet");
   const [description, setDescription] = useState("");
   const [numberPlate, setNumberPlate] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -228,7 +230,7 @@ const Report = () => {
               <Label htmlFor="violation-type">Violation Type</Label>
               <Select 
                 value={violationType} 
-                onValueChange={setViolationType}
+                onValueChange={(value: ViolationType) => setViolationType(value)}
                 required
               >
                 <SelectTrigger id="violation-type">
