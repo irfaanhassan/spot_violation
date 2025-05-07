@@ -3,69 +3,160 @@ import { AlertTriangle, Award, LogOut, Settings, User, MapPin } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-// Mock data
-const userStats = {
-  totalPoints: 250,
-  totalReports: 25,
-  verified: 18,
-  rejected: 3,
-  pending: 4
-};
+// Profile data type
+interface ProfileData {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  points: number;
+  total_reports: number;
+  verified_reports: number;
+}
 
-const userBadges = [
-  { id: 1, name: "First Report", icon: AlertTriangle, date: "Apr 10, 2025" },
-  { id: 2, name: "10 Verified Reports", icon: Award, date: "Apr 18, 2025" },
-  { id: 3, name: "Weekly Top Reporter", icon: Award, date: "Apr 22, 2025" }
-];
+// Report data type
+interface ReportData {
+  id: string;
+  type: string;
+  location: string;
+  date: string;
+  status: string;
+  points: number;
+}
 
-const userReports = [
-  {
-    id: 1,
-    type: "No Helmet",
-    location: "MG Road, Bangalore",
-    date: "Apr 24, 2025",
-    status: "verified",
-    points: 10
-  },
-  {
-    id: 2,
-    type: "Wrong Side Driving",
-    location: "Brigade Road, Bangalore",
-    date: "Apr 23, 2025",
-    status: "verified",
-    points: 10
-  },
-  {
-    id: 3,
-    type: "Signal Jump",
-    location: "Residency Road, Bangalore",
-    date: "Apr 22, 2025",
-    status: "pending",
-    points: 0
-  },
-  {
-    id: 4,
-    type: "Triple Riding",
-    location: "Indiranagar, Bangalore",
-    date: "Apr 20, 2025",
-    status: "rejected",
-    points: 0
-  },
-  {
-    id: 5,
-    type: "No Helmet",
-    location: "Koramangala, Bangalore",
-    date: "Apr 18, 2025",
-    status: "verified",
-    points: 10
-  }
-];
+// Badge data type
+interface BadgeData {
+  id: string;
+  name: string;
+  icon: string;
+  date: string;
+}
 
 const Profile = () => {
-  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const [userReports, setUserReports] = useState<ReportData[]>([]);
+  const [userBadges, setUserBadges] = useState<BadgeData[]>([]);
+
+  // Fetch profile data
+  const { data: profileData, isLoading: profileLoading } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      
+      if (error) {
+        toast.error("Failed to load profile data");
+        throw error;
+      }
+      
+      return data as ProfileData;
+    },
+    enabled: !!user,
+  });
+
+  // Fetch user reports
+  useEffect(() => {
+    const fetchUserReports = async () => {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      
+      if (error) {
+        toast.error("Failed to load reports data");
+        return;
+      }
+      
+      // Transform data format
+      const formattedReports = data.map(report => ({
+        id: report.id,
+        type: report.violation_type,
+        location: report.location,
+        date: new Date(report.created_at).toLocaleDateString(),
+        status: report.status,
+        points: report.points
+      }));
+      
+      setUserReports(formattedReports);
+    };
+    
+    fetchUserReports();
+  }, [user]);
+
+  // Fetch user badges
+  useEffect(() => {
+    const fetchUserBadges = async () => {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from("user_badges")
+        .select(`
+          awarded_at,
+          badges (
+            id,
+            name,
+            icon
+          )
+        `)
+        .eq("user_id", user.id);
+      
+      if (error) {
+        toast.error("Failed to load badges data");
+        return;
+      }
+      
+      // Transform data format
+      const formattedBadges = data.map(item => ({
+        id: item.badges.id,
+        name: item.badges.name,
+        icon: item.badges.icon,
+        date: new Date(item.awarded_at).toLocaleDateString()
+      }));
+      
+      setUserBadges(formattedBadges);
+    };
+    
+    fetchUserBadges();
+  }, [user]);
+
+  // If profile is loading, show a loading state
+  if (profileLoading || !profileData) {
+    return (
+      <div className="px-4 py-6 pb-20">
+        <div className="flex items-center justify-center h-64">
+          <p>Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const userStats = {
+    totalPoints: profileData.points,
+    totalReports: profileData.total_reports,
+    verified: profileData.verified_reports,
+    rejected: userReports.filter(r => r.status === "rejected").length,
+    pending: userReports.filter(r => r.status === "pending").length
+  };
+
+  // If no badges found, use some default ones for display
+  const displayBadges = userBadges.length > 0 ? userBadges : [
+    { id: "1", name: "First Report", icon: "AlertTriangle", date: "Not earned yet" },
+    { id: "2", name: "10 Verified Reports", icon: "Award", date: "Not earned yet" },
+    { id: "3", name: "Weekly Top Reporter", icon: "Award", date: "Not earned yet" }
+  ];
 
   return (
     <div className="px-4 py-6 pb-20">
@@ -81,8 +172,8 @@ const Profile = () => {
               <User className="h-10 w-10 text-primary" />
             </div>
             <div className="ml-4">
-              <h2 className="text-xl font-semibold">Demo User</h2>
-              <p className="text-sm text-muted-foreground">user@example.com</p>
+              <h2 className="text-xl font-semibold">{profileData.username || user?.email}</h2>
+              <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
           </div>
 
@@ -111,7 +202,7 @@ const Profile = () => {
               Settings
             </Button>
             <Button 
-              onClick={() => navigate("/")}
+              onClick={() => signOut()}
               variant="destructive" 
               className="flex items-center"
             >
@@ -132,18 +223,27 @@ const Profile = () => {
         </CardHeader>
         <CardContent>
           <div className="flex gap-3 overflow-x-auto py-2 scrollbar-hide">
-            {userBadges.map(badge => (
-              <div 
-                key={badge.id} 
-                className="flex flex-col items-center min-w-24 bg-muted p-3 rounded-lg"
-              >
-                <div className="bg-secondary/20 p-2 rounded-full mb-2">
-                  <badge.icon className="h-6 w-6 text-secondary" />
+            {displayBadges.map(badge => {
+              // Dynamic icon selection based on badge type
+              const BadgeIcon = badge.icon === "AlertTriangle" 
+                ? AlertTriangle 
+                : badge.icon === "Award" 
+                ? Award 
+                : User;
+              
+              return (
+                <div 
+                  key={badge.id} 
+                  className="flex flex-col items-center min-w-24 bg-muted p-3 rounded-lg"
+                >
+                  <div className="bg-secondary/20 p-2 rounded-full mb-2">
+                    <BadgeIcon className="h-6 w-6 text-secondary" />
+                  </div>
+                  <span className="text-sm font-medium text-center">{badge.name}</span>
+                  <span className="text-xs text-muted-foreground mt-1">{badge.date}</span>
                 </div>
-                <span className="text-sm font-medium text-center">{badge.name}</span>
-                <span className="text-xs text-muted-foreground mt-1">{badge.date}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -167,89 +267,107 @@ const Profile = () => {
             </div>
 
             <TabsContent value="all" className="mt-0">
-              <div className="divide-y">
-                {userReports.map(report => (
-                  <div key={report.id} className="p-4">
-                    <div className="flex justify-between mb-1">
-                      <h3 className="font-medium">{report.type}</h3>
-                      <span 
-                        className={`text-xs px-2 py-0.5 rounded-full ${
-                          report.status === "verified" 
-                            ? "bg-success-light text-success"
-                            : report.status === "rejected"
-                            ? "bg-violation-light text-violation"
-                            : "bg-secondary/20 text-secondary-foreground"
-                        }`}
-                      >
-                        {report.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center text-sm text-muted-foreground mb-1">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      <span>{report.location}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{report.date}</span>
-                      {report.points > 0 && (
-                        <span className="font-medium text-success flex items-center">
-                          +{report.points} points
+              {userReports.length > 0 ? (
+                <div className="divide-y">
+                  {userReports.map(report => (
+                    <div key={report.id} className="p-4">
+                      <div className="flex justify-between mb-1">
+                        <h3 className="font-medium">{report.type}</h3>
+                        <span 
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            report.status === "verified" 
+                              ? "bg-success-light text-success"
+                              : report.status === "rejected"
+                              ? "bg-violation-light text-violation"
+                              : "bg-secondary/20 text-secondary-foreground"
+                          }`}
+                        >
+                          {report.status}
                         </span>
-                      )}
+                      </div>
+                      <div className="flex items-center text-sm text-muted-foreground mb-1">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        <span>{report.location}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">{report.date}</span>
+                        {report.points > 0 && (
+                          <span className="font-medium text-success flex items-center">
+                            +{report.points} points
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center">
+                  <p className="text-muted-foreground">No reports found. Start reporting traffic violations!</p>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="verified" className="mt-0">
-              <div className="divide-y">
-                {userReports
-                  .filter(report => report.status === "verified")
-                  .map(report => (
-                    <div key={report.id} className="p-4">
-                      <div className="flex justify-between mb-1">
-                        <h3 className="font-medium">{report.type}</h3>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-success-light text-success">
-                          verified
-                        </span>
+              {userReports.filter(r => r.status === "verified").length > 0 ? (
+                <div className="divide-y">
+                  {userReports
+                    .filter(report => report.status === "verified")
+                    .map(report => (
+                      <div key={report.id} className="p-4">
+                        <div className="flex justify-between mb-1">
+                          <h3 className="font-medium">{report.type}</h3>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-success-light text-success">
+                            verified
+                          </span>
+                        </div>
+                        <div className="flex items-center text-sm text-muted-foreground mb-1">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          <span>{report.location}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{report.date}</span>
+                          <span className="font-medium text-success flex items-center">
+                            +{report.points} points
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center text-sm text-muted-foreground mb-1">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        <span>{report.location}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{report.date}</span>
-                        <span className="font-medium text-success flex items-center">
-                          +{report.points} points
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center">
+                  <p className="text-muted-foreground">No verified reports yet.</p>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="pending" className="mt-0">
-              <div className="divide-y">
-                {userReports
-                  .filter(report => report.status === "pending")
-                  .map(report => (
-                    <div key={report.id} className="p-4">
-                      <div className="flex justify-between mb-1">
-                        <h3 className="font-medium">{report.type}</h3>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/20 text-secondary-foreground">
-                          pending
-                        </span>
+              {userReports.filter(r => r.status === "pending").length > 0 ? (
+                <div className="divide-y">
+                  {userReports
+                    .filter(report => report.status === "pending")
+                    .map(report => (
+                      <div key={report.id} className="p-4">
+                        <div className="flex justify-between mb-1">
+                          <h3 className="font-medium">{report.type}</h3>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/20 text-secondary-foreground">
+                            pending
+                          </span>
+                        </div>
+                        <div className="flex items-center text-sm text-muted-foreground mb-1">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          <span>{report.location}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">{report.date}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center text-sm text-muted-foreground mb-1">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        <span>{report.location}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{report.date}</span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center">
+                  <p className="text-muted-foreground">No pending reports.</p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

@@ -9,7 +9,140 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      badges: {
+        Row: {
+          created_at: string
+          description: string
+          icon: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          icon: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          id: string
+          points: number
+          total_reports: number
+          updated_at: string
+          username: string | null
+          verified_reports: number
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          id: string
+          points?: number
+          total_reports?: number
+          updated_at?: string
+          username?: string | null
+          verified_reports?: number
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          points?: number
+          total_reports?: number
+          updated_at?: string
+          username?: string | null
+          verified_reports?: number
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          latitude: number | null
+          location: string
+          longitude: number | null
+          number_plate: string | null
+          points: number
+          status: Database["public"]["Enums"]["report_status"]
+          updated_at: string
+          user_id: string
+          violation_type: Database["public"]["Enums"]["violation_type"]
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          latitude?: number | null
+          location: string
+          longitude?: number | null
+          number_plate?: string | null
+          points?: number
+          status?: Database["public"]["Enums"]["report_status"]
+          updated_at?: string
+          user_id: string
+          violation_type: Database["public"]["Enums"]["violation_type"]
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          latitude?: number | null
+          location?: string
+          longitude?: number | null
+          number_plate?: string | null
+          points?: number
+          status?: Database["public"]["Enums"]["report_status"]
+          updated_at?: string
+          user_id?: string
+          violation_type?: Database["public"]["Enums"]["violation_type"]
+        }
+        Relationships: []
+      }
+      user_badges: {
+        Row: {
+          awarded_at: string
+          badge_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          badge_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          awarded_at?: string
+          badge_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +151,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      report_status: "pending" | "verified" | "rejected"
+      violation_type:
+        | "No Helmet"
+        | "Wrong-side Driving"
+        | "Signal Jump"
+        | "Triple Riding"
+        | "Overloading"
+        | "Others"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +273,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      report_status: ["pending", "verified", "rejected"],
+      violation_type: [
+        "No Helmet",
+        "Wrong-side Driving",
+        "Signal Jump",
+        "Triple Riding",
+        "Overloading",
+        "Others",
+      ],
+    },
   },
 } as const

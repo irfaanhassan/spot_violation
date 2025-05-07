@@ -1,1 +1,5 @@
+
 project_id = "mnwqhmlvtjttltzyoypy"
+
+[functions.detect-plate]
+verify_jwt = true

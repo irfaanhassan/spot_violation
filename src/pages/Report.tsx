@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Camera, MapPin, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,20 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 
-const violationTypes = [
-  "No Helmet",
-  "Wrong-side Driving",
-  "Signal Jump",
-  "Triple Riding",
-  "Overloading",
-  "Others"
-];
+// Get violation types from Supabase types
+import { Constants } from "@/integrations/supabase/types";
+const violationTypes = Constants.public.Enums.violation_type;
 
 const Report = () => {
   const [step, setStep] = useState(1);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [location, setLocation] = useState("Getting your location...");
+  const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
   const [violationType, setViolationType] = useState("");
   const [description, setDescription] = useState("");
   const [numberPlate, setNumberPlate] = useState("");
@@ -29,17 +29,36 @@ const Report = () => {
   
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  // Simulate getting location on component mount
-  useState(() => {
-    setTimeout(() => {
-      setLocation("Current Location: MG Road, Bangalore");
-    }, 1500);
-  });
+  // Get user's location when component mounts
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setCoordinates({ lat: latitude, lng: longitude });
+          
+          // Reverse geocoding to get address from coordinates (simplified)
+          setLocation(`Current Location: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          
+          // In a real app, you would use a geocoding service like Google Maps API
+          // to convert these coordinates to a human-readable address
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          setLocation("Location not available");
+        }
+      );
+    } else {
+      setLocation("Geolocation not supported by this browser");
+    }
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = () => {
         setPhoto(reader.result as string);
@@ -49,24 +68,74 @@ const Report = () => {
   };
 
   const handleCapturePhoto = () => {
-    // This would access the camera in a real implementation
-    // For now, we'll simulate it with a file upload
     document.getElementById("photo-upload")?.click();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to submit a report",
+      });
+      return;
+    }
+    
     setUploading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setUploading(false);
+    try {
+      let imageUrl = null;
+      
+      // Upload image if available
+      if (photoFile) {
+        const fileName = `${user.id}/${Date.now()}-${photoFile.name}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('report_images')
+          .upload(fileName, photoFile);
+          
+        if (uploadError) throw uploadError;
+        
+        // Get public URL for the uploaded image
+        const { data: publicUrlData } = supabase.storage
+          .from('report_images')
+          .getPublicUrl(fileName);
+          
+        imageUrl = publicUrlData.publicUrl;
+      }
+      
+      // Insert report data into the database
+      const { error: insertError } = await supabase.from('reports').insert({
+        user_id: user.id,
+        violation_type: violationType,
+        description,
+        number_plate: numberPlate,
+        location: location,
+        latitude: coordinates?.lat,
+        longitude: coordinates?.lng,
+        image_url: imageUrl,
+        // Status and points will use default values
+      });
+      
+      if (insertError) throw insertError;
+      
       toast({
         title: "Report submitted successfully!",
         description: "You'll be notified when it's reviewed.",
       });
+      
       navigate("/app");
-    }, 2000);
+    } catch (error: any) {
+      console.error("Error submitting report:", error);
+      toast({
+        variant: "destructive",
+        title: "Error submitting report",
+        description: error.message || "Something went wrong",
+      });
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -103,7 +172,10 @@ const Report = () => {
                   variant="outline" 
                   size="sm" 
                   className="absolute bottom-3 right-3 bg-background"
-                  onClick={() => setPhoto(null)}
+                  onClick={() => {
+                    setPhoto(null);
+                    setPhotoFile(null);
+                  }}
                 >
                   Retake
                 </Button>
@@ -118,7 +190,7 @@ const Report = () => {
                     <Button onClick={handleCapturePhoto}>
                       <Camera className="h-4 w-4 mr-2" /> Capture
                     </Button>
-                    <Button variant="outline">
+                    <Button variant="outline" onClick={handleCapturePhoto}>
                       <Upload className="h-4 w-4 mr-2" /> Upload
                     </Button>
                   </div>
