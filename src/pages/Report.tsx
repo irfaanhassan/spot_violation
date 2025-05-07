@@ -22,7 +22,7 @@ const Report = () => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [location, setLocation] = useState("Getting your location...");
   const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
-  const [violationType, setViolationType] = useState("");
+  const [violationType, setViolationType] = useState<"No Helmet" | "Wrong-side Driving" | "Signal Jump" | "Triple Riding" | "Overloading" | "Others">("No Helmet");
   const [description, setDescription] = useState("");
   const [numberPlate, setNumberPlate] = useState("");
   const [uploading, setUploading] = useState(false);
