@@ -1,270 +1,260 @@
 
-import { AlertTriangle, MapPin, Trophy } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, Plus, MapPin, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink } from "@/components/ui/pagination";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ReportDetail } from "@/components/ReportDetail";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-
-// Types
-interface ReportData {
-  id: string;
-  type: string;
-  location: string;
-  time: string;
-  status: string;
-}
-
-interface TopReporter {
-  id: string;
-  name: string;
-  points: number;
-  reports: number;
-}
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [votesCounts, setVotesCounts] = useState<Record<string, {upvotes: number, downvotes: number}>>({});
   
-  // Fetch user profile
-  const { data: profile } = useQuery({
-    queryKey: ["userProfile", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      
-      if (error) {
-        toast.error("Failed to load profile data");
-        throw error;
-      }
-      
-      return data;
-    },
-    enabled: !!user
-  });
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const reportsPerPage = 5;
 
-  // Fetch recent violations
-  const { data: recentViolations = [], isLoading: reportsLoading } = useQuery({
-    queryKey: ["recentReports", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
+  useEffect(() => {
+    fetchReports();
+  }, [activeTab, page]);
+  
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
       
-      const { data, error } = await supabase
-        .from("reports")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(3);
+      // Prepare filter based on active tab
+      let query = supabase.from('reports').select('*', { count: 'exact' });
       
-      if (error) {
-        toast.error("Failed to load reports");
-        throw error;
+      if (activeTab === "pending") {
+        query = query.eq('status', 'pending');
+      } else if (activeTab === "verified") {
+        query = query.in('status', ['verified', 'verified_by_community', 'approved_by_admin']);
+      } else if (activeTab === "rejected") {
+        query = query.in('status', ['rejected', 'invalid_plate']);
       }
       
-      return data.map(report => ({
-        id: report.id,
-        type: report.violation_type,
-        location: report.location,
-        time: formatTimeAgo(new Date(report.created_at)), 
-        status: report.status
-      }));
-    },
-    enabled: !!user
-  });
-
-  // Fetch top reporters
-  const { data: topReporters = [], isLoading: reportersLoading } = useQuery({
-    queryKey: ["topReporters"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, username, points, total_reports")
-        .order("points", { ascending: false })
-        .limit(3);
+      // Add pagination
+      query = query
+        .order('created_at', { ascending: false })
+        .range((page - 1) * reportsPerPage, page * reportsPerPage - 1);
       
-      if (error) {
-        toast.error("Failed to load top reporters");
-        throw error;
+      const { data, count, error } = await query;
+      
+      if (error) throw error;
+      
+      setReports(data || []);
+      setTotalPages(Math.ceil((count || 0) / reportsPerPage));
+      
+      // Fetch votes counts for each report
+      if (data && data.length > 0) {
+        await fetchVotesCounts(data.map(r => r.id));
       }
       
-      return data.map(reporter => ({
-        id: reporter.id,
-        name: reporter.username || "Anonymous User",
-        points: reporter.points,
-        reports: reporter.total_reports
-      }));
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to load reports"
+      });
+    } finally {
+      setLoading(false);
     }
-  });
-
-  // Helper function to format time
-  function formatTimeAgo(date: Date): string {
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  };
+  
+  const fetchVotesCounts = async (reportIds: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('report_votes')
+        .select('*')
+        .in('report_id', reportIds);
+      
+      if (error) throw error;
+      
+      // Group votes by report_id and count upvotes/downvotes
+      const votesMap: Record<string, {upvotes: number, downvotes: number}> = {};
+      
+      data?.forEach(vote => {
+        if (!votesMap[vote.report_id]) {
+          votesMap[vote.report_id] = { upvotes: 0, downvotes: 0 };
+        }
+        
+        if (vote.vote_type === 'upvote') {
+          votesMap[vote.report_id].upvotes += 1;
+        } else {
+          votesMap[vote.report_id].downvotes += 1;
+        }
+      });
+      
+      setVotesCounts(votesMap);
+      
+    } catch (error) {
+      console.error("Error fetching votes:", error);
+    }
+  };
+  
+  const handleReportClick = (reportId: string) => {
+    setSelectedReport(reportId === selectedReport ? null : reportId);
+  };
+  
+  const handleStatusChange = (reportId: string, newStatus: string) => {
+    // Update the report status locally
+    setReports(prevReports => 
+      prevReports.map(report => 
+        report.id === reportId ? { ...report, status: newStatus } : report
+      )
+    );
     
-    if (diffInSeconds < 60) {
-      return 'Just now';
-    } else if (diffInSeconds < 3600) {
-      const minutes = Math.floor(diffInSeconds / 60);
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-    } else if (diffInSeconds < 86400) {
-      const hours = Math.floor(diffInSeconds / 3600);
-      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    } else if (diffInSeconds < 604800) {
-      const days = Math.floor(diffInSeconds / 86400);
-      return `${days} day${days > 1 ? 's' : ''} ago`;
-    } else {
-      return date.toLocaleDateString();
+    // Refresh reports after a status change
+    fetchReports();
+  };
+  
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'verified':
+      case 'verified_by_community':
+      case 'approved_by_admin':
+        return 'success';
+      case 'rejected':
+      case 'invalid_plate':
+        return 'destructive';
+      default:
+        return 'default';
     }
-  }
+  };
 
   return (
     <div className="px-4 py-6 pb-20">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Welcome back, {profile?.username || user?.email?.split('@')[0] || "User"}
-          </p>
-        </div>
-        <div className="flex items-center space-x-1 bg-secondary/20 px-3 py-1 rounded-full">
-          <Trophy className="h-4 w-4 text-secondary" />
-          <span className="text-sm font-medium">{profile?.points || 0} pts</span>
-        </div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Traffic Reports</h1>
+        <Button onClick={() => navigate("/app/report")}>
+          <Plus className="h-5 w-5 mr-2" /> Report
+        </Button>
       </div>
 
-      {/* Quick Action */}
-      <Card className="mb-6 bg-primary text-primary-foreground">
-        <CardContent className="p-4 flex justify-between items-center">
-          <div>
-            <h3 className="font-semibold mb-1">Spotted a violation?</h3>
-            <p className="text-sm text-primary-foreground/80">Report it now and earn points</p>
-          </div>
-          <Button 
-            onClick={() => navigate("/app/report")}
-            variant="secondary" 
-            size="sm" 
-            className="whitespace-nowrap"
-          >
-            Report Now
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Recent Reports */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Recent Violations</h2>
-          <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/app/profile")}>
-            View All
-          </Button>
-        </div>
-
-        <div className="space-y-3">
-          {reportsLoading ? (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground">Loading reports...</p>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+        <TabsList className="grid grid-cols-4 mb-4">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
+          <TabsTrigger value="verified">Verified</TabsTrigger>
+          <TabsTrigger value="rejected">Rejected</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value={activeTab} className="space-y-4">
+          {loading ? (
+            <div className="text-center py-10">
+              <div className="animate-pulse">Loading reports...</div>
             </div>
-          ) : recentViolations.length > 0 ? (
-            recentViolations.map(violation => (
-              <Card key={violation.id} className="overflow-hidden">
-                <CardContent className="p-4 flex items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center mb-1">
-                      <h3 className="font-medium">{violation.type}</h3>
-                      <span 
-                        className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
-                          violation.status === "verified" 
-                            ? "bg-success-light text-success"
-                            : violation.status === "rejected"
-                            ? "bg-violation-light text-violation"
-                            : "bg-secondary/20 text-secondary-foreground"
-                        }`}
-                      >
-                        {violation.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      <span>{violation.location}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {violation.time}
-                    </div>
-                  </div>
-                  <AlertTriangle className={`h-5 w-5 ${
-                    violation.status === "verified" 
-                      ? "text-success"
-                      : violation.status === "rejected"
-                      ? "text-violation"
-                      : "text-secondary"
-                  }`} />
-                </CardContent>
-              </Card>
-            ))
+          ) : reports.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <AlertTriangle className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>No reports found in this category</p>
+            </div>
           ) : (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground">No reports yet. Report your first violation!</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Top Reporters Leaderboard */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Top Reporters</h2>
-          <Button variant="ghost" size="sm" className="text-xs" onClick={() => navigate("/app/leaderboard")}>
-            View All
-          </Button>
-        </div>
-
-        <Card>
-          <CardContent className="p-4 divide-y">
-            {reportersLoading ? (
-              <div className="text-center py-6">
-                <p className="text-muted-foreground">Loading leaderboard...</p>
-              </div>
-            ) : topReporters.length > 0 ? (
-              topReporters.map((reporter, index) => (
-                <div key={reporter.id} className="py-3 flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center mr-3 ${
-                      index === 0 
-                        ? "bg-yellow-100 text-yellow-600" 
-                        : index === 1 
-                        ? "bg-gray-100 text-gray-600"
-                        : "bg-amber-100 text-amber-600"
-                    }`}>
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium">{reporter.name}</p>
-                      <p className="text-xs text-muted-foreground">{reporter.reports} reports</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Trophy className="h-4 w-4 text-secondary" />
-                    <span className="font-medium">{reporter.points}</span>
-                  </div>
+            <>
+              {reports.map(report => (
+                <div key={report.id} className="space-y-4">
+                  <Card className={`overflow-hidden cursor-pointer ${selectedReport === report.id ? 'ring ring-primary' : ''}`}
+                        onClick={() => handleReportClick(report.id)}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-medium">{report.violation_type}</h3>
+                            <Badge variant={getStatusBadgeVariant(report.status)}>
+                              {report.status.replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
+                          
+                          <div className="flex items-center text-sm text-muted-foreground mb-2">
+                            <MapPin className="h-4 w-4 mr-1" />
+                            <span className="line-clamp-1">{report.location}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Vote counts */}
+                        {votesCounts[report.id] && (
+                          <div className="flex items-center space-x-3">
+                            <div className="flex items-center">
+                              <ThumbsUp className="h-4 w-4 mr-1 text-green-500" />
+                              <span className="text-sm">{votesCounts[report.id].upvotes}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <ThumbsDown className="h-4 w-4 mr-1 text-red-500" />
+                              <span className="text-sm">{votesCounts[report.id].downvotes}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                    <CardFooter className="px-4 py-2 bg-muted/30 flex justify-between">
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(report.created_at).toLocaleDateString()}
+                      </div>
+                      {report.number_plate && (
+                        <div className="text-xs font-medium">
+                          Plate: {report.number_plate}
+                        </div>
+                      )}
+                    </CardFooter>
+                  </Card>
+                  
+                  {/* Expanded report details */}
+                  {selectedReport === report.id && (
+                    <ReportDetail 
+                      reportId={report.id}
+                      onStatusChange={(newStatus) => handleStatusChange(report.id, newStatus)}
+                    />
+                  )}
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-6">
-                <p className="text-muted-foreground">No reporters yet. Be the first!</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <Pagination>
+                  <PaginationContent>
+                    {page > 1 && (
+                      <PaginationItem>
+                        <PaginationLink onClick={() => setPage(page - 1)}>
+                          Previous
+                        </PaginationLink>
+                      </PaginationItem>
+                    )}
+                    
+                    {[...Array(totalPages)].map((_, index) => (
+                      <PaginationItem key={index}>
+                        <PaginationLink
+                          isActive={page === index + 1}
+                          onClick={() => setPage(index + 1)}
+                        >
+                          {index + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    
+                    {page < totalPages && (
+                      <PaginationItem>
+                        <PaginationLink onClick={() => setPage(page + 1)}>
+                          Next
+                        </PaginationLink>
+                      </PaginationItem>
+                    )}
+                  </PaginationContent>
+                </Pagination>
+              )}
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

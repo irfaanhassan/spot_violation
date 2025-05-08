@@ -66,6 +66,38 @@ export type Database = {
         }
         Relationships: []
       }
+      report_votes: {
+        Row: {
+          created_at: string
+          id: string
+          report_id: string
+          user_id: string
+          vote_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          report_id: string
+          user_id: string
+          vote_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          report_id?: string
+          user_id?: string
+          vote_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_votes_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           created_at: string
@@ -151,7 +183,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      report_status: "pending" | "verified" | "rejected"
+      report_status:
+        | "pending"
+        | "verified"
+        | "rejected"
+        | "verified_by_community"
+        | "approved_by_admin"
+        | "invalid_plate"
       violation_type:
         | "No Helmet"
         | "Wrong-side Driving"
@@ -274,7 +312,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      report_status: ["pending", "verified", "rejected"],
+      report_status: [
+        "pending",
+        "verified",
+        "rejected",
+        "verified_by_community",
+        "approved_by_admin",
+        "invalid_plate",
+      ],
       violation_type: [
         "No Helmet",
         "Wrong-side Driving",
