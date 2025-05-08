@@ -51,12 +51,22 @@ const Report = () => {
   // Load Google Maps script
   useEffect(() => {
     const loadGoogleMapsScript = () => {
+      // Check if the script is already loaded
+      if (window.google?.maps) {
+        setMapLoaded(true);
+        return;
+      }
+      
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAJZwzmilDdDMv0ogSAEBxPsJxcJMMNz-4&libraries=places`;
       script.async = true;
       script.defer = true;
       script.onload = () => {
+        console.log("Google Maps loaded successfully");
         setMapLoaded(true);
+      };
+      script.onerror = (error) => {
+        console.error("Error loading Google Maps:", error);
       };
       document.head.appendChild(script);
     };
@@ -78,6 +88,7 @@ const Report = () => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
+          console.log("Got coordinates:", latitude, longitude);
           setCoordinates({ lat: latitude, lng: longitude });
           
           // If Google Maps is loaded, reverse geocode the coordinates
@@ -140,23 +151,10 @@ const Report = () => {
       
       // Upload image if available
       if (photoFile) {
+        // Create a folder with user ID to organize uploads and satisfy RLS policy
         const fileName = `${user.id}/${Date.now()}-${photoFile.name}`;
         
-        // Check if bucket exists
-        const { data: bucketList } = await supabase.storage.listBuckets();
-        const bucketExists = bucketList?.some(bucket => bucket.name === 'report_images');
-        
-        // Create bucket if it doesn't exist
-        if (!bucketExists) {
-          const { error: createError } = await supabase.storage.createBucket('report_images', {
-            public: true
-          });
-          
-          if (createError) {
-            console.error("Error creating bucket:", createError);
-            throw createError;
-          }
-        }
+        console.log("Uploading to path:", fileName);
         
         // Upload file to bucket
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -171,12 +169,15 @@ const Report = () => {
           throw uploadError;
         }
         
+        console.log("Upload successful:", uploadData);
+        
         // Get public URL for the uploaded image
         const { data: publicUrlData } = supabase.storage
           .from('report_images')
           .getPublicUrl(fileName);
           
         imageUrl = publicUrlData.publicUrl;
+        console.log("Image URL:", imageUrl);
       }
       
       // Insert report data into the database
@@ -243,18 +244,26 @@ const Report = () => {
     if (coordinates && mapLoaded && window.google) {
       const mapElement = document.getElementById('map-preview');
       if (mapElement) {
-        const map = new window.google.maps.Map(mapElement, {
-          center: coordinates,
-          zoom: 15,
-          disableDefaultUI: true,
-          zoomControl: false,
-          mapTypeControl: false,
-        });
-        
-        new window.google.maps.Marker({
-          position: coordinates,
-          map,
-        });
+        try {
+          const map = new window.google.maps.Map(mapElement, {
+            center: coordinates,
+            zoom: 15,
+            disableDefaultUI: true,
+            zoomControl: false,
+            mapTypeControl: false,
+          });
+          
+          new window.google.maps.Marker({
+            position: coordinates,
+            map,
+          });
+          
+          console.log("Map initialized successfully");
+        } catch (error) {
+          console.error("Error initializing map:", error);
+        }
+      } else {
+        console.warn("Map element not found in DOM");
       }
     }
   }, [coordinates, mapLoaded, step]);
