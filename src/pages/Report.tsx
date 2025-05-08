@@ -19,6 +19,19 @@ const violationTypes = Constants.public.Enums.violation_type;
 // Define a type for violationType based on the available options
 type ViolationType = typeof violationTypes[number];
 
+// Declare Google Maps types
+declare global {
+  interface Window {
+    google: {
+      maps: {
+        Map: new (element: HTMLElement, options: any) => any;
+        Marker: new (options: any) => any;
+        Geocoder: new () => any;
+      }
+    }
+  }
+}
+
 const Report = () => {
   const [step, setStep] = useState(1);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -129,19 +142,28 @@ const Report = () => {
       if (photoFile) {
         const fileName = `${user.id}/${Date.now()}-${photoFile.name}`;
         
-        // Create the bucket if it doesn't exist
-        const { data: bucketExists } = await supabase.storage.getBucket('report_images');
+        // Check if bucket exists
+        const { data: bucketList } = await supabase.storage.listBuckets();
+        const bucketExists = bucketList?.some(bucket => bucket.name === 'report_images');
+        
+        // Create bucket if it doesn't exist
         if (!bucketExists) {
-          // Try to create the bucket
-          await supabase.storage.createBucket('report_images', {
+          const { error: createError } = await supabase.storage.createBucket('report_images', {
             public: true
           });
+          
+          if (createError) {
+            console.error("Error creating bucket:", createError);
+            throw createError;
+          }
         }
         
+        // Upload file to bucket
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('report_images')
           .upload(fileName, photoFile, {
-            upsert: true
+            upsert: true,
+            cacheControl: '3600'
           });
           
         if (uploadError) {
@@ -167,7 +189,6 @@ const Report = () => {
         latitude: coordinates?.lat,
         longitude: coordinates?.lng,
         image_url: imageUrl,
-        // Status and points will use default values
       });
       
       if (insertError) {
