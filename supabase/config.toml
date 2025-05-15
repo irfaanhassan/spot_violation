@@ -4,6 +4,9 @@ project_id = "mnwqhmlvtjttltzyoypy"
 [functions.detect-plate]
 verify_jwt = true
 
+[functions.detect-violations]
+verify_jwt = true
+
 [storage]
 [storage.report_images]
 public = true

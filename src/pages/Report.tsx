@@ -1,6 +1,5 @@
-
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Camera, MapPin, Upload, Video } from "lucide-react";
+import { ArrowLeft, Camera, MapPin, Upload, Video, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +47,12 @@ const Report = () => {
   const [uploading, setUploading] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // New states for ML detection
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectedViolations, setDetectedViolations] = useState<string[]>([]);
+  const [detectionConfidence, setDetectionConfidence] = useState(0);
+  const [autoDetectEnabled, setAutoDetectEnabled] = useState(true);
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -146,6 +151,11 @@ const Report = () => {
         const reader = new FileReader();
         reader.onload = () => {
           setMedia(reader.result as string);
+          
+          // If auto-detect is enabled, run violation detection after image is loaded
+          if (autoDetectEnabled) {
+            detectViolations(reader.result as string);
+          }
         };
         reader.readAsDataURL(file);
       }
@@ -154,6 +164,93 @@ const Report = () => {
 
   const handleCaptureMedia = () => {
     document.getElementById("media-upload")?.click();
+  };
+  
+  // New function to detect violations using ML model
+  const detectViolations = async (imageUrl?: string) => {
+    if (!media && !imageUrl) {
+      toast({
+        title: "Error",
+        description: "Please upload an image or video first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsDetecting(true);
+    setDetectedViolations([]);
+    
+    try {
+      // First upload the file to get a public URL if we don't have one
+      let mediaUrl = imageUrl;
+      
+      if (!mediaUrl && mediaFile && user) {
+        // Create a temporary file name
+        const fileName = `${user.id}/temp-${Date.now()}-${mediaFile.name}`;
+        
+        // Upload file to bucket temporarily to analyze it
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('report_images')
+          .upload(fileName, mediaFile, {
+            upsert: true,
+            cacheControl: '3600'
+          });
+          
+        if (uploadError) {
+          throw uploadError;
+        }
+        
+        // Get public URL for the uploaded media
+        const { data: publicUrlData } = supabase.storage
+          .from('report_images')
+          .getPublicUrl(fileName);
+          
+        mediaUrl = publicUrlData.publicUrl;
+      }
+      
+      if (!mediaUrl) {
+        throw new Error("Could not get media URL");
+      }
+      
+      // Call the edge function to detect violations
+      const { data, error } = await supabase.functions.invoke('detect-violations', {
+        body: {
+          imageUrl: mediaType === 'image' ? mediaUrl : null,
+          videoUrl: mediaType === 'video' ? mediaUrl : null,
+        }
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Update the UI with detection results
+      if (data.detectedViolations && Array.isArray(data.detectedViolations)) {
+        setDetectedViolations(data.detectedViolations);
+        setDetectionConfidence(data.confidence || 0);
+        
+        // If violations detected, update the form
+        if (data.detectedViolations.length > 0 && data.detectedViolations.includes(violationType)) {
+          // Set the first detected violation as the selected type
+          setViolationType(data.detectedViolations[0] as ViolationType);
+        }
+      }
+      
+      toast({
+        title: data.detectedViolations.length > 0 ? "Violations Detected!" : "No Violations Detected",
+        description: data.message,
+      });
+      
+    } catch (error: any) {
+      console.error("Error detecting violations:", error);
+      toast({
+        variant: "destructive",
+        title: "Detection Failed",
+        description: error.message || "Could not process the image/video",
+      });
+    } finally {
+      setIsDetecting(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -214,6 +311,9 @@ const Report = () => {
         longitude: coordinates?.lng,
         image_url: mediaUrl,
         media_type: mediaType,
+        ml_detected: detectedViolations.length > 0,
+        ml_confidence: detectionConfidence,
+        ml_violations: detectedViolations.length > 0 ? detectedViolations : null,
       });
       
       if (insertError) {
@@ -343,20 +443,34 @@ const Report = () => {
                     Your browser does not support the video tag.
                   </video>
                 )}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="absolute bottom-3 right-3 bg-background"
-                  onClick={() => {
-                    setMedia(null);
-                    setMediaFile(null);
-                    if (mediaType === "video" && media) {
-                      URL.revokeObjectURL(media);
-                    }
-                  }}
-                >
-                  Retake
-                </Button>
+                <div className="absolute bottom-3 right-3 flex gap-2">
+                  {mediaType === "image" && !isDetecting && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="bg-background"
+                      onClick={() => detectViolations()}
+                      disabled={isDetecting}
+                    >
+                      {isDetecting ? "Detecting..." : "Detect Violations"}
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="bg-background"
+                    onClick={() => {
+                      setMedia(null);
+                      setMediaFile(null);
+                      setDetectedViolations([]);
+                      if (mediaType === "video" && media) {
+                        URL.revokeObjectURL(media);
+                      }
+                    }}
+                  >
+                    Retake
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="mb-6 border-2 border-dashed border-muted rounded-lg p-12 text-center">
@@ -389,6 +503,41 @@ const Report = () => {
             )}
           </div>
 
+          {/* ML Detection Results */}
+          {detectedViolations.length > 0 && (
+            <div className="p-4 border border-green-200 bg-green-50 rounded-lg">
+              <div className="flex items-center mb-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600 mr-2" />
+                <h3 className="font-medium">AI Detection Results</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">
+                Our AI model detected the following violations:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {detectedViolations.map((violation, idx) => (
+                  <span 
+                    key={idx} 
+                    className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full"
+                  >
+                    {violation}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Detection confidence: {Math.round(detectionConfidence * 100)}%
+              </p>
+            </div>
+          )}
+          
+          {isDetecting && (
+            <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg flex items-center">
+              <div className="mr-3">
+                <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+              </div>
+              <p className="text-sm">Analyzing image with AI model...</p>
+            </div>
+          )}
+
           <MapPreview />
 
           <Button 
@@ -419,6 +568,13 @@ const Report = () => {
                   ))}
                 </SelectContent>
               </Select>
+              
+              {detectedViolations.length > 0 && detectedViolations.includes(violationType) && (
+                <p className="text-xs text-green-600 flex items-center mt-1">
+                  <CheckCircle2 className="h-3 w-3 mr-1" /> 
+                  AI verified this violation type
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -431,7 +587,7 @@ const Report = () => {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                AI-assisted number plate detection coming soon
+                AI-assisted number plate detection will run automatically
               </p>
             </div>
 

@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { AlertTriangle, MapPin, Calendar, Info, Award, Car, Video } from "lucide-react";
+import { AlertTriangle, MapPin, Calendar, Info, Award, Car, Video, CheckCircle2, Brain } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { VoteButtons } from "@/components/VoteButtons";
@@ -14,7 +13,7 @@ interface ReportDetailProps {
   onStatusChange?: (newStatus: string) => void;
 }
 
-// Define a type for the report that includes media_type
+// Define a type for the report that includes media_type and ML detection fields
 interface ReportWithMediaType {
   id: string;
   created_at: string;
@@ -29,7 +28,10 @@ interface ReportWithMediaType {
   status: string;
   points: number;
   updated_at: string;
-  media_type?: 'image' | 'video'; // Add this as optional
+  media_type?: 'image' | 'video';
+  ml_detected?: boolean;
+  ml_confidence?: number;
+  ml_violations?: string[];
 }
 
 export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
@@ -248,11 +250,11 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
   const formattedDate = new Date(report.created_at).toLocaleDateString();
   
   // Determine if this is a video or image (default to image if not specified)
-  const isVideo = report.media_type === 'video';
+  const isVideo = report?.media_type === 'video';
   
   return (
     <Card className="overflow-hidden">
-      {report.image_url && (
+      {report?.image_url && (
         <div className="relative">
           {isVideo ? (
             <video 
@@ -300,11 +302,11 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
       
       <CardContent className="p-4 space-y-4">
         <div className="space-y-2">
-          <h3 className="text-lg font-semibold">{report.violation_type}</h3>
+          <h3 className="text-lg font-semibold">{report?.violation_type}</h3>
           
           <div className="flex items-center text-sm text-muted-foreground gap-1">
             <MapPin className="h-4 w-4" />
-            <span>{report.location}</span>
+            <span>{report?.location}</span>
           </div>
           
           <div className="flex items-center text-sm text-muted-foreground gap-1">
@@ -313,7 +315,33 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
           </div>
         </div>
         
-        {report.description && (
+        {/* AI Detection Results */}
+        {report?.ml_detected && report?.ml_violations && report.ml_violations.length > 0 && (
+          <div className="border rounded-md p-3 bg-green-50 border-green-200">
+            <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
+              <Brain className="h-4 w-4 text-green-600" /> AI Detection
+            </h4>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1">
+                {report.ml_violations.map((violation, idx) => (
+                  <span 
+                    key={idx} 
+                    className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full"
+                  >
+                    {violation}
+                  </span>
+                ))}
+              </div>
+              {report.ml_confidence && (
+                <p className="text-xs text-muted-foreground">
+                  Detection confidence: {Math.round(report.ml_confidence * 100)}%
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {report?.description && (
           <div>
             <h4 className="text-sm font-medium flex items-center gap-1 mb-1">
               <Info className="h-4 w-4" /> Additional Details
@@ -332,7 +360,7 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
             <div className="flex items-center justify-center py-2">
               <div className="animate-pulse text-sm">Detecting number plate...</div>
             </div>
-          ) : report.number_plate ? (
+          ) : report?.number_plate ? (
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span className="text-sm">Number Plate:</span>
@@ -346,7 +374,7 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
                 </div>
               )}
             </div>
-          ) : report.status === 'invalid_plate' ? (
+          ) : report?.status === 'invalid_plate' ? (
             <div className="text-sm text-red-500">Invalid or no plate detected</div>
           ) : isVideo ? (
             <div className="text-sm text-muted-foreground">Number plate detection not available for videos</div>
@@ -359,7 +387,7 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
       <CardFooter className="px-4 py-3 bg-muted/40 flex justify-between items-center">
         <div className="flex items-center text-sm">
           <Award className="h-4 w-4 mr-1 text-yellow-500" />
-          <span>{report.points} points</span>
+          <span>{report?.points} points</span>
         </div>
         
         <div className="text-xs text-muted-foreground">
