@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { AlertTriangle, MapPin, Calendar, Info, Award, Car, Video } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -14,8 +13,26 @@ interface ReportDetailProps {
   onStatusChange?: (newStatus: string) => void;
 }
 
+// Define a type for the report that includes media_type
+interface ReportWithMediaType {
+  id: string;
+  created_at: string;
+  user_id: string;
+  violation_type: string;
+  description: string | null;
+  location: string;
+  latitude: number | null;
+  longitude: number | null;
+  image_url: string | null;
+  number_plate: string | null;
+  status: string;
+  points: number;
+  updated_at: string;
+  media_type?: 'image' | 'video'; // Add this as optional
+}
+
 export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<ReportWithMediaType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [upvotes, setUpvotes] = useState(0);
@@ -42,10 +59,14 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
           throw error;
         }
         
-        setReport(data);
+        setReport(data as ReportWithMediaType);
         
         // If the report has an image, try to detect the number plate
-        if (data.image_url && data.media_type === 'image' && !data.number_plate && data.status === 'pending') {
+        // Only try to detect if it's an image type (or if media_type is undefined, assume it's an image for backward compatibility)
+        if (data.image_url && 
+           (!data.media_type || data.media_type === 'image') && 
+           !data.number_plate && 
+           data.status === 'pending') {
           detectNumberPlate(data.image_url);
         }
         
@@ -223,11 +244,14 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
   // Format report data for display
   const formattedDate = new Date(report.created_at).toLocaleDateString();
   
+  // Determine if this is a video or image (default to image if not specified)
+  const isVideo = report.media_type === 'video';
+  
   return (
     <Card className="overflow-hidden">
       {report.image_url && (
         <div className="relative">
-          {report.media_type === 'video' ? (
+          {isVideo ? (
             <video 
               controls
               className="w-full h-48 object-cover"
@@ -254,7 +278,7 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
               </Badge>
               
               <div className="flex items-center gap-2">
-                {report.media_type === 'video' && (
+                {isVideo && (
                   <Video className="h-4 w-4 text-white" />
                 )}
                 
@@ -321,7 +345,7 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
             </div>
           ) : report.status === 'invalid_plate' ? (
             <div className="text-sm text-red-500">Invalid or no plate detected</div>
-          ) : report.media_type === 'video' ? (
+          ) : isVideo ? (
             <div className="text-sm text-muted-foreground">Number plate detection not available for videos</div>
           ) : (
             <div className="text-sm text-muted-foreground">No plate information available</div>
