@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { AlertTriangle, MapPin, Calendar, Info, Award, Car } from "lucide-react";
+import { AlertTriangle, MapPin, Calendar, Info, Award, Car, Video } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { VoteButtons } from "@/components/VoteButtons";
@@ -45,7 +45,7 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
         setReport(data);
         
         // If the report has an image, try to detect the number plate
-        if (data.image_url && !data.number_plate && data.status === 'pending') {
+        if (data.image_url && data.media_type === 'image' && !data.number_plate && data.status === 'pending') {
           detectNumberPlate(data.image_url);
         }
         
@@ -227,11 +227,21 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
     <Card className="overflow-hidden">
       {report.image_url && (
         <div className="relative">
-          <img 
-            src={report.image_url} 
-            alt="Violation evidence" 
-            className="w-full h-48 object-cover" 
-          />
+          {report.media_type === 'video' ? (
+            <video 
+              controls
+              className="w-full h-48 object-cover"
+            >
+              <source src={report.image_url} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          ) : (
+            <img 
+              src={report.image_url} 
+              alt="Violation evidence" 
+              className="w-full h-48 object-cover" 
+            />
+          )}
           
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
             <div className="flex justify-between items-center">
@@ -243,13 +253,19 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
                 {report.status.replace(/_/g, ' ')}
               </Badge>
               
-              <VoteButtons
-                reportId={reportId}
-                initialUpvotes={upvotes}
-                initialDownvotes={downvotes}
-                userVote={userVote}
-                onVoteChange={handleVoteChange}
-              />
+              <div className="flex items-center gap-2">
+                {report.media_type === 'video' && (
+                  <Video className="h-4 w-4 text-white" />
+                )}
+                
+                <VoteButtons
+                  reportId={reportId}
+                  initialUpvotes={upvotes}
+                  initialDownvotes={downvotes}
+                  userVote={userVote}
+                  onVoteChange={handleVoteChange}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -305,6 +321,8 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
             </div>
           ) : report.status === 'invalid_plate' ? (
             <div className="text-sm text-red-500">Invalid or no plate detected</div>
+          ) : report.media_type === 'video' ? (
+            <div className="text-sm text-muted-foreground">Number plate detection not available for videos</div>
           ) : (
             <div className="text-sm text-muted-foreground">No plate information available</div>
           )}

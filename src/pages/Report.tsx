@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, Camera, MapPin, Upload } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ArrowLeft, Camera, MapPin, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +19,9 @@ const violationTypes = Constants.public.Enums.violation_type;
 // Define a type for violationType based on the available options
 type ViolationType = typeof violationTypes[number];
 
+// Define media type
+type MediaType = "image" | "video";
+
 // Declare Google Maps types
 declare global {
   interface Window {
@@ -34,8 +37,9 @@ declare global {
 
 const Report = () => {
   const [step, setStep] = useState(1);
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [mediaType, setMediaType] = useState<MediaType>("image");
+  const [media, setMedia] = useState<string | null>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [location, setLocation] = useState("Getting your location...");
   const [coordinates, setCoordinates] = useState<{lat: number, lng: number} | null>(null);
   const [violationType, setViolationType] = useState<ViolationType>("No Helmet");
@@ -43,6 +47,7 @@ const Report = () => {
   const [numberPlate, setNumberPlate] = useState("");
   const [uploading, setUploading] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -120,17 +125,35 @@ const Report = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setPhoto(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      setMediaFile(file);
+      
+      // Check if the file is a video or an image
+      const fileType = file.type.split('/')[0];
+      setMediaType(fileType as MediaType);
+      
+      if (fileType === "video") {
+        // Create a URL for the video file
+        const videoURL = URL.createObjectURL(file);
+        setMedia(videoURL);
+        
+        // Load video metadata to show preview
+        if (videoRef.current) {
+          videoRef.current.src = videoURL;
+          videoRef.current.load();
+        }
+      } else if (fileType === "image") {
+        // Create a URL for the image file
+        const reader = new FileReader();
+        reader.onload = () => {
+          setMedia(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleCapturePhoto = () => {
-    document.getElementById("photo-upload")?.click();
+  const handleCaptureMedia = () => {
+    document.getElementById("media-upload")?.click();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,19 +170,19 @@ const Report = () => {
     setUploading(true);
     
     try {
-      let imageUrl = null;
+      let mediaUrl = null;
       
-      // Upload image if available
-      if (photoFile) {
+      // Upload image or video if available
+      if (mediaFile) {
         // Create a folder with user ID to organize uploads and satisfy RLS policy
-        const fileName = `${user.id}/${Date.now()}-${photoFile.name}`;
+        const fileName = `${user.id}/${Date.now()}-${mediaFile.name}`;
         
         console.log("Uploading to path:", fileName);
         
         // Upload file to bucket
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('report_images')
-          .upload(fileName, photoFile, {
+          .upload(fileName, mediaFile, {
             upsert: true,
             cacheControl: '3600'
           });
@@ -171,13 +194,13 @@ const Report = () => {
         
         console.log("Upload successful:", uploadData);
         
-        // Get public URL for the uploaded image
+        // Get public URL for the uploaded media
         const { data: publicUrlData } = supabase.storage
           .from('report_images')
           .getPublicUrl(fileName);
           
-        imageUrl = publicUrlData.publicUrl;
-        console.log("Image URL:", imageUrl);
+        mediaUrl = publicUrlData.publicUrl;
+        console.log("Media URL:", mediaUrl);
       }
       
       // Insert report data into the database
@@ -189,7 +212,8 @@ const Report = () => {
         location: location,
         latitude: coordinates?.lat,
         longitude: coordinates?.lng,
-        image_url: imageUrl,
+        image_url: mediaUrl,
+        media_type: mediaType,
       });
       
       if (insertError) {
@@ -268,6 +292,16 @@ const Report = () => {
     }
   }, [coordinates, mapLoaded, step]);
 
+  // Clean up object URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up any created object URLs
+      if (media && mediaType === "video") {
+        URL.revokeObjectURL(media);
+      }
+    };
+  }, [media, mediaType]);
+
   return (
     <div className="px-4 py-6 pb-20">
       <div className="flex items-center mb-6">
@@ -288,23 +322,37 @@ const Report = () => {
         <div className="space-y-6">
           <div className="text-center">
             <p className="text-muted-foreground mb-6">
-              Start by taking a photo or uploading evidence of the traffic violation
+              Start by taking a photo/video or uploading evidence of the traffic violation
             </p>
             
-            {photo ? (
+            {media ? (
               <div className="relative mb-4">
-                <img 
-                  src={photo} 
-                  alt="Violation evidence" 
-                  className="w-full h-64 object-cover rounded-lg" 
-                />
+                {mediaType === "image" ? (
+                  <img 
+                    src={media} 
+                    alt="Violation evidence" 
+                    className="w-full h-64 object-cover rounded-lg" 
+                  />
+                ) : (
+                  <video 
+                    ref={videoRef}
+                    controls
+                    className="w-full h-64 object-cover rounded-lg" 
+                  >
+                    <source src={media} type={mediaFile?.type} />
+                    Your browser does not support the video tag.
+                  </video>
+                )}
                 <Button 
                   variant="outline" 
                   size="sm" 
                   className="absolute bottom-3 right-3 bg-background"
                   onClick={() => {
-                    setPhoto(null);
-                    setPhotoFile(null);
+                    setMedia(null);
+                    setMediaFile(null);
+                    if (mediaType === "video" && media) {
+                      URL.revokeObjectURL(media);
+                    }
                   }}
                 >
                   Retake
@@ -314,21 +362,25 @@ const Report = () => {
               <div className="mb-6 border-2 border-dashed border-muted rounded-lg p-12 text-center">
                 <div className="flex flex-col items-center">
                   <Camera className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">Take a photo or upload from gallery</p>
+                  <p className="text-muted-foreground mb-4">Upload photo or video evidence</p>
                   
                   <div className="flex gap-4">
-                    <Button onClick={handleCapturePhoto}>
+                    <Button onClick={handleCaptureMedia}>
                       <Camera className="h-4 w-4 mr-2" /> Capture
                     </Button>
-                    <Button variant="outline" onClick={handleCapturePhoto}>
+                    <Button variant="outline" onClick={handleCaptureMedia}>
                       <Upload className="h-4 w-4 mr-2" /> Upload
                     </Button>
                   </div>
                   
+                  <p className="text-xs text-muted-foreground mt-4">
+                    Supports images and videos up to 25MB
+                  </p>
+                  
                   <input 
-                    id="photo-upload" 
+                    id="media-upload" 
                     type="file" 
-                    accept="image/*" 
+                    accept="image/*,video/*" 
                     className="hidden" 
                     onChange={handleFileChange}
                   />
@@ -342,7 +394,7 @@ const Report = () => {
           <Button 
             className="w-full" 
             size="lg" 
-            disabled={!photo}
+            disabled={!media}
             onClick={() => setStep(2)}
           >
             Continue
