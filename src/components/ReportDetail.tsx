@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { AlertTriangle, MapPin, Calendar, Info, Award, Car, Video } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -59,15 +60,17 @@ export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
           throw error;
         }
         
-        setReport(data as ReportWithMediaType);
+        // Cast the data to our interface type that includes media_type
+        const reportData = data as unknown as ReportWithMediaType;
+        setReport(reportData);
         
         // If the report has an image, try to detect the number plate
         // Only try to detect if it's an image type (or if media_type is undefined, assume it's an image for backward compatibility)
-        if (data.image_url && 
-           (!data.media_type || data.media_type === 'image') && 
-           !data.number_plate && 
-           data.status === 'pending') {
-          detectNumberPlate(data.image_url);
+        if (reportData.image_url && 
+           (!reportData.media_type || reportData.media_type === 'image') && 
+           !reportData.number_plate && 
+           reportData.status === 'pending') {
+          detectNumberPlate(reportData.image_url);
         }
         
       } catch (err: any) {
