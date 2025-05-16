@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 
 // This Edge Function will process an image/video and detect traffic violations
-// It's currently set up as a placeholder for your ML model integration
+// It's configured to be easily replaced with your ML API when ready
 
 serve(async (req) => {
   // Handle CORS
@@ -41,18 +41,12 @@ serve(async (req) => {
 
     console.log("Processing media:", imageUrl || videoUrl);
 
-    // TODO: This is where you would integrate your ML model
-    // For now, we'll return mock detection results
-
-    // Mock violation detection - replace with your actual ML model integration
-    const detectedViolations = simulateViolationDetection(imageUrl ? "image" : "video");
+    // TODO: This is where you'll integrate your ML API
+    // Call the API integration function which will be replaced with your actual API
+    const results = await detectViolationsWithAPI(imageUrl || videoUrl, imageUrl ? "image" : "video");
     
     return new Response(
-      JSON.stringify({
-        detectedViolations,
-        confidence: detectedViolations.length > 0 ? 0.85 : 0,
-        message: detectedViolations.length > 0 ? "Violations detected" : "No violations detected"
-      }),
+      JSON.stringify(results),
       { 
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -74,10 +68,34 @@ serve(async (req) => {
   }
 });
 
+// This function will be replaced with your ML API integration
+// For now it uses the simulation function but is structured to be easily replaced
+async function detectViolationsWithAPI(mediaUrl: string, mediaType: "image" | "video") {
+  // PLACEHOLDER: Replace this with your actual API call
+  // For example:
+  // const response = await fetch('https://your-ml-api.com/detect', {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({ mediaUrl, mediaType })
+  // });
+  // const data = await response.json();
+  
+  // For now, use the simulation function
+  const detectedViolations = simulateViolationDetection(mediaType);
+  const confidence = detectedViolations.length > 0 ? 0.85 : 0;
+  
+  return {
+    detectedViolations,
+    confidence,
+    shouldAutoVerify: confidence > 0.95, // New field to indicate if confidence is high enough for auto verification
+    message: detectedViolations.length > 0 ? "Violations detected" : "No violations detected"
+  };
+}
+
 // Mock detection function - replace with your actual ML model
 function simulateViolationDetection(mediaType: "image" | "video") {
   // This function simulates ML detection with random results
-  // You'll replace this with your actual ML model integration
+  // You'll replace this with your actual ML API integration
   
   const possibleViolations = [
     "Triple Riding", 

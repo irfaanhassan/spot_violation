@@ -58,6 +58,10 @@ const Report = () => {
   // New state for subscription
   const [isSubscribed, setIsSubscribed] = useState(false);
   
+  // New state for auto-verification
+  const [autoVerifyEnabled, setAutoVerifyEnabled] = useState(true);
+  const [highConfidenceDetection, setHighConfidenceDetection] = useState(false);
+  
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -183,6 +187,7 @@ const Report = () => {
     
     setIsDetecting(true);
     setDetectedViolations([]);
+    setHighConfidenceDetection(false);
     
     try {
       // First upload the file to get a public URL if we don't have one
@@ -232,6 +237,7 @@ const Report = () => {
       if (data.detectedViolations && Array.isArray(data.detectedViolations)) {
         setDetectedViolations(data.detectedViolations);
         setDetectionConfidence(data.confidence || 0);
+        setHighConfidenceDetection(data.shouldAutoVerify || false);
         
         // If violations detected, update the form
         if (data.detectedViolations.length > 0 && data.detectedViolations.includes(violationType)) {
@@ -330,6 +336,9 @@ const Report = () => {
       // In a real application, this would be based on the violation type
       const randomChallanAmount = Math.floor(Math.random() * 4500) + 500;
       
+      // Determine if the report should be auto-verified based on ML confidence
+      const initialStatus = autoVerifyEnabled && highConfidenceDetection ? 'verified' : 'pending';
+      
       // Insert report data into the database
       const { data: reportData, error: insertError } = await supabase.from('reports').insert({
         user_id: user.id,
@@ -344,7 +353,10 @@ const Report = () => {
         ml_detected: detectedViolations.length > 0,
         ml_confidence: detectionConfidence,
         ml_violations: detectedViolations.length > 0 ? detectedViolations : null,
-        challan_amount: randomChallanAmount
+        challan_amount: randomChallanAmount,
+        status: initialStatus,
+        // If auto-verified by ML, add points
+        points: initialStatus === 'verified' ? 10 : 0
       }).select();
       
       if (insertError) {
@@ -361,11 +373,18 @@ const Report = () => {
         });
       }
       
+      let toastMessage = "Report submitted successfully!";
+      if (autoVerifyEnabled && highConfidenceDetection) {
+        toastMessage += " Our AI has automatically verified this violation with high confidence!";
+      } else {
+        toastMessage += isSubscribed ? 
+          " You'll be notified when it's verified and earn rewards when the challan is paid." : 
+          " You'll be notified when it's reviewed.";
+      }
+      
       toast({
-        title: "Report submitted successfully!",
-        description: isSubscribed ? 
-          "You'll be notified when it's verified and earn rewards when the challan is paid." : 
-          "You'll be notified when it's reviewed.",
+        title: "Report submitted",
+        description: toastMessage,
       });
       
       navigate("/app");
@@ -586,6 +605,11 @@ const Report = () => {
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 Detection confidence: {Math.round(detectionConfidence * 100)}%
+                {highConfidenceDetection && (
+                  <span className="text-green-600 ml-2">
+                    (High confidence - will be automatically verified)
+                  </span>
+                )}
               </p>
             </div>
           )}
