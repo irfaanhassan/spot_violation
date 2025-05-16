@@ -8,10 +8,10 @@ import { useAuth } from "@/context/AuthContext";
 
 interface VoteButtonsProps {
   reportId: string;
-  initialUpvotes: number;
-  initialDownvotes: number;
-  userVote: 'upvote' | 'downvote' | null;
-  onVoteChange?: () => void;
+  initialUpvotes?: number;
+  initialDownvotes?: number;
+  userVote?: 'upvote' | 'downvote' | null;
+  onVoteChange?: (newVote: 'upvote' | 'downvote' | null) => void;
 }
 
 export function VoteButtons({ 
@@ -60,6 +60,7 @@ export function VoteButtons({
         }
         
         setCurrentUserVote(null);
+        if (onVoteChange) onVoteChange(null);
         toast({ title: "Vote removed" });
       }
       // If user voted differently before, change their vote
@@ -83,6 +84,7 @@ export function VoteButtons({
         }
         
         setCurrentUserVote(voteType);
+        if (onVoteChange) onVoteChange(voteType);
         toast({ title: `Vote changed to ${voteType}` });
       }
       // If user hasn't voted yet, add a new vote
@@ -106,12 +108,8 @@ export function VoteButtons({
         }
         
         setCurrentUserVote(voteType);
+        if (onVoteChange) onVoteChange(voteType);
         toast({ title: `Vote recorded` });
-      }
-      
-      // Notify parent component that vote has changed
-      if (onVoteChange) {
-        onVoteChange();
       }
       
     } catch (error) {

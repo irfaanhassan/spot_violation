@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Plus, MapPin, ThumbsUp, ThumbsDown } from "lucide-react";
@@ -212,7 +211,7 @@ const Dashboard = () => {
                   {selectedReport === report.id && (
                     <ReportDetail 
                       reportId={report.id}
-                      onStatusChange={(newStatus) => handleStatusChange(report.id, newStatus)}
+                      onClose={() => setSelectedReport(null)}
                     />
                   )}
                 </div>

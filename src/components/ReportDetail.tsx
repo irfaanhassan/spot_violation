@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { 
   DialogContent, 
@@ -18,7 +19,7 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userVote, setUserVote] = useState<string | null>(null);
+  const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(null);
   const { user } = useAuth();
 
   // Add new state for showing reward popup
@@ -60,7 +61,7 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
             .eq("user_id", user.id)
             .maybeSingle();
 
-          setUserVote(voteData?.vote_type || null);
+          setUserVote(voteData?.vote_type as 'upvote' | 'downvote' | null);
         }
         
         // Check if user is subscribed
@@ -122,6 +123,10 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
 
   const formatDate = (dateString: string) => {
     return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+  };
+
+  const handleVoteChange = (newVote: 'upvote' | 'downvote' | null) => {
+    setUserVote(newVote);
   };
 
   return (
@@ -219,8 +224,10 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
         <div className="pt-2 border-t">
           <VoteButtons
             reportId={report.id}
+            initialUpvotes={0}
+            initialDownvotes={0}
             userVote={userVote}
-            onVoteChange={(newVote) => setUserVote(newVote)}
+            onVoteChange={handleVoteChange}
           />
         </div>
       </div>
