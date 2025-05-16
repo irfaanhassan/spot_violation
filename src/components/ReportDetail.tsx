@@ -1,399 +1,273 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle, MapPin, Calendar, Info, Award, Car, Video, CheckCircle2, Brain } from "lucide-react";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { VoteButtons } from "@/components/VoteButtons";
+import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { Constants } from "@/integrations/supabase/types";
 import { useAuth } from "@/context/AuthContext";
-import { toast } from "sonner";
+import { AlertCircle, MapPin, Car, Check, X, Clock, Wallet, CheckCircle2 } from "lucide-react";
+import { VoteButtons } from "./VoteButtons";
+import { Link } from "react-router-dom";
 
-interface ReportDetailProps {
-  reportId: string;
-  onStatusChange?: (newStatus: string) => void;
-}
-
-// Define a type for the report that includes media_type and ML detection fields
-interface ReportWithMediaType {
-  id: string;
-  created_at: string;
-  user_id: string;
-  violation_type: string;
-  description: string | null;
-  location: string;
-  latitude: number | null;
-  longitude: number | null;
-  image_url: string | null;
-  number_plate: string | null;
-  status: string;
-  points: number;
-  updated_at: string;
-  media_type?: 'image' | 'video';
-  ml_detected?: boolean;
-  ml_confidence?: number;
-  ml_violations?: string[];
-}
-
-export function ReportDetail({ reportId, onStatusChange }: ReportDetailProps) {
-  const [report, setReport] = useState<ReportWithMediaType | null>(null);
+export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose: () => void }) => {
+  const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [upvotes, setUpvotes] = useState(0);
-  const [downvotes, setDownvotes] = useState(0);
-  const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(null);
-  const [vehicleInfo, setVehicleInfo] = useState<any>(null);
-  const [isPlateDetecting, setIsPlateDetecting] = useState(false);
-  
+  const [userVote, setUserVote] = useState<string | null>(null);
   const { user } = useAuth();
-  
-  // Fetch the report details
+
+  // Add new state for showing reward popup
+  const [showRewardPopup, setShowRewardPopup] = useState(false);
+  const [isUserSubscribed, setIsUserSubscribed] = useState(false);
+  const [challanAmount, setChallanAmount] = useState<number>(0);
+
   useEffect(() => {
     const fetchReport = async () => {
+      if (!reportId) return;
+
       try {
-        setLoading(true);
-        
         const { data, error } = await supabase
-          .from('reports')
-          .select('*')
-          .eq('id', reportId)
+          .from("reports")
+          .select(`
+            *,
+            profiles:user_id (username)
+          `)
+          .eq("id", reportId)
           .single();
-          
-        if (error) {
-          throw error;
+
+        if (error) throw error;
+        setReport(data);
+        setChallanAmount(data.challan_amount || 0);
+
+        // Show reward popup if report status is verified
+        if (data.status === 'verified') {
+          setShowRewardPopup(true);
         }
-        
-        // Cast the data to our interface type that includes media_type
-        const reportData = data as unknown as ReportWithMediaType;
-        setReport(reportData);
-        
-        // If the report has an image, try to detect the number plate
-        // Only try to detect if it's an image type (or if media_type is undefined, assume it's an image for backward compatibility)
-        if (reportData.image_url && 
-           (!reportData.media_type || reportData.media_type === 'image') && 
-           !reportData.number_plate && 
-           reportData.status === 'pending') {
-          detectNumberPlate(reportData.image_url);
-        }
-        
-      } catch (err: any) {
-        setError(err.message);
-        toast.error("Failed to load report details");
-      } finally {
+
         setLoading(false);
-      }
-    };
-    
-    fetchReport();
-  }, [reportId]);
-  
-  // Fetch votes for this report
-  useEffect(() => {
-    const fetchVotes = async () => {
-      try {
-        // Get all votes for this report
-        const { data: votesData, error: votesError } = await supabase
-          .from('report_votes')
-          .select('*')
-          .eq('report_id', reportId);
-          
-        if (votesError) {
-          throw votesError;
-        }
-        
-        // Count upvotes and downvotes
-        const upvoteCount = votesData.filter(vote => vote.vote_type === 'upvote').length;
-        const downvoteCount = votesData.filter(vote => vote.vote_type === 'downvote').length;
-        
-        setUpvotes(upvoteCount);
-        setDownvotes(downvoteCount);
-        
-        // Check if current user has voted
+
+        // Check user votes
         if (user) {
-          const userVoteObj = votesData.find(vote => vote.user_id === user.id);
-          if (userVoteObj) {
-            setUserVote(userVoteObj.vote_type as 'upvote' | 'downvote');
-          }
+          const { data: voteData } = await supabase
+            .from("report_votes")
+            .select("vote_type")
+            .eq("report_id", reportId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          setUserVote(voteData?.vote_type || null);
         }
         
-      } catch (err: any) {
-        console.error("Error fetching votes:", err);
+        // Check if user is subscribed
+        if (user) {
+          const { data: userData } = await supabase
+            .from("profiles")
+            .select("is_subscribed")
+            .eq("id", user.id)
+            .single();
+            
+          setIsUserSubscribed(userData?.is_subscribed || false);
+        }
+      } catch (error) {
+        console.error("Error loading report:", error);
+        setError("Failed to load report details");
       }
     };
-    
-    if (reportId) {
-      fetchVotes();
-    }
+
+    fetchReport();
   }, [reportId, user]);
-  
-  const detectNumberPlate = async (imageUrl: string) => {
-    try {
-      setIsPlateDetecting(true);
-      
-      // Call the edge function to detect the plate
-      const { data, error } = await supabase.functions.invoke('detect-plate', {
-        body: { imageUrl }
-      });
-      
-      if (error) {
-        throw error;
-      }
-      
-      setVehicleInfo(data);
-      
-      // If plate was detected successfully, update the report
-      if (data.isValid && data.plate) {
-        const { error: updateError } = await supabase
-          .from('reports')
-          .update({ 
-            number_plate: data.plate 
-          })
-          .eq('id', reportId);
-          
-        if (updateError) {
-          throw updateError;
-        }
-        
-        // Update local state
-        setReport(prev => ({
-          ...prev,
-          number_plate: data.plate
-        }));
-        
-        toast.success("Number plate detected successfully");
-      } else if (!data.isValid) {
-        // If plate is invalid, update report status
-        const { error: updateStatusError } = await supabase
-          .from('reports')
-          .update({ 
-            status: 'invalid_plate' 
-          })
-          .eq('id', reportId);
-          
-        if (updateStatusError) {
-          throw updateStatusError;
-        }
-        
-        // Update local state
-        setReport(prev => ({
-          ...prev,
-          status: 'invalid_plate'
-        }));
-        
-        // Notify parent component about status change
-        if (onStatusChange) {
-          onStatusChange('invalid_plate');
-        }
-        
-        toast.error("Invalid number plate detected");
-      }
-      
-    } catch (err: any) {
-      console.error("Error detecting number plate:", err);
-      toast.error("Failed to detect number plate");
-    } finally {
-      setIsPlateDetecting(false);
-    }
-  };
-  
-  // Handle vote changes
-  const handleVoteChange = async () => {
-    // Refetch report to get updated status
-    try {
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('id', reportId)
-        .single();
-        
-      if (error) {
-        throw error;
-      }
-      
-      // If status changed, update local state
-      if (data.status !== report.status) {
-        setReport(prev => ({
-          ...prev,
-          status: data.status
-        }));
-        
-        // Notify parent component about status change
-        if (onStatusChange) {
-          onStatusChange(data.status);
-        }
-        
-        // Show appropriate toast based on new status
-        if (data.status === 'verified_by_community') {
-          toast.success("Report has been verified by the community");
-        } else if (data.status === 'rejected') {
-          toast.error("Report has been rejected by the community");
-        }
-      }
-      
-    } catch (err: any) {
-      console.error("Error refetching report:", err);
-    }
-  };
-  
+
   if (loading) {
-    return <div className="p-4 text-center">Loading report details...</div>;
+    return (
+      <DialogContent className="sm:max-w-md">
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </DialogContent>
+    );
   }
-  
+
   if (error) {
-    return <div className="p-4 text-center text-red-500">Error: {error}</div>;
+    return (
+      <DialogContent className="sm:max-w-md">
+        <div className="py-6 text-center text-red-500">
+          <AlertCircle className="h-10 w-10 mx-auto mb-2" />
+          <p>{error}</p>
+        </div>
+      </DialogContent>
+    );
   }
-  
-  if (!report) {
-    return <div className="p-4 text-center">Report not found</div>;
-  }
-  
-  // Format report data for display
-  const formattedDate = new Date(report.created_at).toLocaleDateString();
-  
-  // Determine if this is a video or image (default to image if not specified)
-  const isVideo = report?.media_type === 'video';
-  
+
+  if (!report) return null;
+
+  const getStatusBadge = () => {
+    switch (report.status) {
+      case "verified":
+        return <Badge className="bg-green-500">Verified</Badge>;
+      case "rejected":
+        return <Badge variant="destructive">Rejected</Badge>;
+      case "verified_by_community":
+        return <Badge className="bg-blue-500">Community Verified</Badge>;
+      case "invalid_plate":
+        return <Badge variant="destructive">Invalid Plate</Badge>;
+      default:
+        return <Badge variant="outline" className="border-amber-500 text-amber-500">Pending</Badge>;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+  };
+
   return (
-    <Card className="overflow-hidden">
-      {report?.image_url && (
-        <div className="relative">
-          {isVideo ? (
-            <video 
-              controls
-              className="w-full h-48 object-cover"
-            >
-              <source src={report.image_url} type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
-          ) : (
-            <img 
-              src={report.image_url} 
-              alt="Violation evidence" 
-              className="w-full h-48 object-cover" 
+    <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
+      <DialogHeader>
+        <DialogTitle>Report Details</DialogTitle>
+      </DialogHeader>
+
+      <div className="space-y-4">
+        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+          {report.image_url ? (
+            <img
+              src={report.image_url}
+              alt="Violation evidence"
+              className="w-full h-full object-cover"
             />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-muted-foreground">No image available</p>
+            </div>
           )}
-          
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-            <div className="flex justify-between items-center">
-              <Badge variant={
-                report.status === 'verified' || report.status === 'verified_by_community' || report.status === 'approved_by_admin' ? 'success' :
-                report.status === 'rejected' || report.status === 'invalid_plate' ? 'destructive' :
-                'default'
-              }>
-                {report.status.replace(/_/g, ' ')}
-              </Badge>
-              
-              <div className="flex items-center gap-2">
-                {isVideo && (
-                  <Video className="h-4 w-4 text-white" />
-                )}
-                
-                <VoteButtons
-                  reportId={reportId}
-                  initialUpvotes={upvotes}
-                  initialDownvotes={downvotes}
-                  userVote={userVote}
-                  onVoteChange={handleVoteChange}
-                />
+          <div className="absolute top-2 right-2">
+            {getStatusBadge()}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Violation Type</p>
+            <p className="font-medium">{report.violation_type}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Date Reported</p>
+            <p className="font-medium">{formatDate(report.created_at)}</p>
+          </div>
+        </div>
+
+        {report.number_plate && (
+          <div className="border rounded-lg p-3">
+            <div className="flex items-center">
+              <Car className="h-5 w-5 mr-2 text-muted-foreground" />
+              <span className="font-medium">Vehicle Details</span>
+            </div>
+            <div className="mt-2">
+              <p className="text-sm text-muted-foreground">Number Plate</p>
+              <p className="font-mono text-lg">{report.number_plate}</p>
+            </div>
+          </div>
+        )}
+
+        {report.location && (
+          <div className="flex items-start">
+            <MapPin className="h-5 w-5 text-muted-foreground mt-0.5 mr-2" />
+            <p>{report.location}</p>
+          </div>
+        )}
+
+        {report.description && (
+          <div>
+            <p className="text-sm text-muted-foreground">Additional Details</p>
+            <p className="mt-1">{report.description}</p>
+          </div>
+        )}
+
+        {/* AI Detection Results */}
+        {report.ml_detected && report.ml_violations && (
+          <div className="border rounded-lg p-3 bg-muted/20">
+            <p className="text-sm font-medium">AI Detection Results</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(report.ml_violations as string[]).map((violation, idx) => (
+                <Badge key={idx} variant="outline">{violation}</Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Challan Amount */}
+        <div className="border rounded-lg p-3 bg-green-50 border-green-100">
+          <div className="flex items-center">
+            <Wallet className="h-5 w-5 mr-2 text-green-600" />
+            <span className="font-medium">Challan Details</span>
+          </div>
+          <div className="mt-2">
+            <p className="text-sm text-green-700">Challan Amount</p>
+            <p className="font-medium text-lg">₹{report.challan_amount || "N/A"}</p>
+            {isUserSubscribed && report.status === 'verified' && (
+              <p className="text-xs text-green-600 mt-1 flex items-center">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                You'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="pt-2 border-t">
+          <VoteButtons
+            reportId={report.id}
+            userVote={userVote}
+            onVoteChange={(newVote) => setUserVote(newVote)}
+          />
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+      </DialogFooter>
+
+      {/* Reward Popup */}
+      {showRewardPopup && report.status === 'verified' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 animate-in fade-in zoom-in">
+            <div className="flex justify-center mb-4">
+              <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
+                <Check className="h-8 w-8 text-green-600" />
               </div>
             </div>
+            <h2 className="text-xl font-bold text-center mb-2">Report Verified!</h2>
+            <p className="text-center text-muted-foreground mb-4">
+              Your report has been verified. You will receive your reward once the violator pays the challan.
+            </p>
+            {isUserSubscribed ? (
+              <div className="bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
+                <p className="text-sm text-center text-green-700">
+                  As a subscriber, you'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
+                </p>
+              </div>
+            ) : (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+                <p className="text-sm text-center text-blue-700">
+                  Subscribe to earn rewards on your verified reports
+                </p>
+                <div className="flex justify-center mt-2">
+                  <Button asChild size="sm" variant="outline" className="bg-white">
+                    <Link to="/app/subscription">Subscribe Now</Link>
+                  </Button>
+                </div>
+              </div>
+            )}
+            <Button className="w-full" onClick={() => setShowRewardPopup(false)}>
+              Got it
+            </Button>
           </div>
         </div>
       )}
-      
-      <CardContent className="p-4 space-y-4">
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold">{report?.violation_type}</h3>
-          
-          <div className="flex items-center text-sm text-muted-foreground gap-1">
-            <MapPin className="h-4 w-4" />
-            <span>{report?.location}</span>
-          </div>
-          
-          <div className="flex items-center text-sm text-muted-foreground gap-1">
-            <Calendar className="h-4 w-4" />
-            <span>{formattedDate}</span>
-          </div>
-        </div>
-        
-        {/* AI Detection Results */}
-        {report?.ml_detected && report?.ml_violations && report.ml_violations.length > 0 && (
-          <div className="border rounded-md p-3 bg-green-50 border-green-200">
-            <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
-              <Brain className="h-4 w-4 text-green-600" /> AI Detection
-            </h4>
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-1">
-                {report.ml_violations.map((violation, idx) => (
-                  <span 
-                    key={idx} 
-                    className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full"
-                  >
-                    {violation}
-                  </span>
-                ))}
-              </div>
-              {report.ml_confidence && (
-                <p className="text-xs text-muted-foreground">
-                  Detection confidence: {Math.round(report.ml_confidence * 100)}%
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-        
-        {report?.description && (
-          <div>
-            <h4 className="text-sm font-medium flex items-center gap-1 mb-1">
-              <Info className="h-4 w-4" /> Additional Details
-            </h4>
-            <p className="text-sm text-muted-foreground">{report.description}</p>
-          </div>
-        )}
-        
-        {/* Number Plate Information */}
-        <div className="border rounded-md p-3 bg-muted/30">
-          <h4 className="text-sm font-medium flex items-center gap-1 mb-2">
-            <Car className="h-4 w-4" /> Vehicle Information
-          </h4>
-          
-          {isPlateDetecting ? (
-            <div className="flex items-center justify-center py-2">
-              <div className="animate-pulse text-sm">Detecting number plate...</div>
-            </div>
-          ) : report?.number_plate ? (
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <span className="text-sm">Number Plate:</span>
-                <span className="text-sm font-medium">{report.number_plate} ✅</span>
-              </div>
-              
-              {vehicleInfo && vehicleInfo.vehicleType && (
-                <div className="flex justify-between">
-                  <span className="text-sm">Vehicle Type:</span>
-                  <span className="text-sm font-medium">{vehicleInfo.vehicleType}</span>
-                </div>
-              )}
-            </div>
-          ) : report?.status === 'invalid_plate' ? (
-            <div className="text-sm text-red-500">Invalid or no plate detected</div>
-          ) : isVideo ? (
-            <div className="text-sm text-muted-foreground">Number plate detection not available for videos</div>
-          ) : (
-            <div className="text-sm text-muted-foreground">No plate information available</div>
-          )}
-        </div>
-      </CardContent>
-      
-      <CardFooter className="px-4 py-3 bg-muted/40 flex justify-between items-center">
-        <div className="flex items-center text-sm">
-          <Award className="h-4 w-4 mr-1 text-yellow-500" />
-          <span>{report?.points} points</span>
-        </div>
-        
-        <div className="text-xs text-muted-foreground">
-          ID: {reportId.slice(0, 8)}...
-        </div>
-      </CardFooter>
-    </Card>
+    </DialogContent>
   );
-}
+};

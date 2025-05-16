@@ -33,12 +33,55 @@ export type Database = {
         }
         Relationships: []
       }
+      challan_payments: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          payment_date: string | null
+          report_id: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          id?: string
+          payment_date?: string | null
+          report_id: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          payment_date?: string | null
+          report_id?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challan_payments_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           id: string
+          is_subscribed: boolean | null
+          plan_name: string | null
           points: number
+          subscription_expires_at: string | null
+          subscription_starts_at: string | null
+          total_earnings: number | null
           total_reports: number
           updated_at: string
           username: string | null
@@ -48,7 +91,12 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id: string
+          is_subscribed?: boolean | null
+          plan_name?: string | null
           points?: number
+          subscription_expires_at?: string | null
+          subscription_starts_at?: string | null
+          total_earnings?: number | null
           total_reports?: number
           updated_at?: string
           username?: string | null
@@ -58,7 +106,12 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          is_subscribed?: boolean | null
+          plan_name?: string | null
           points?: number
+          subscription_expires_at?: string | null
+          subscription_starts_at?: string | null
+          total_earnings?: number | null
           total_reports?: number
           updated_at?: string
           username?: string | null
@@ -100,6 +153,7 @@ export type Database = {
       }
       reports: {
         Row: {
+          challan_amount: number | null
           created_at: string
           description: string | null
           id: string
@@ -115,6 +169,7 @@ export type Database = {
           violation_type: Database["public"]["Enums"]["violation_type"]
         }
         Insert: {
+          challan_amount?: number | null
           created_at?: string
           description?: string | null
           id?: string
@@ -130,6 +185,7 @@ export type Database = {
           violation_type: Database["public"]["Enums"]["violation_type"]
         }
         Update: {
+          challan_amount?: number | null
           created_at?: string
           description?: string | null
           id?: string
@@ -143,6 +199,30 @@ export type Database = {
           updated_at?: string
           user_id?: string
           violation_type?: Database["public"]["Enums"]["violation_type"]
+        }
+        Relationships: []
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string | null
+          duration_months: number
+          id: string
+          name: string
+          price: number
+        }
+        Insert: {
+          created_at?: string | null
+          duration_months: number
+          id?: string
+          name: string
+          price: number
+        }
+        Update: {
+          created_at?: string | null
+          duration_months?: number
+          id?: string
+          name?: string
+          price?: number
         }
         Relationships: []
       }
@@ -171,6 +251,47 @@ export type Database = {
             columns: ["badge_id"]
             isOneToOne: false
             referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_transactions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          report_id: string | null
+          status: string | null
+          transaction_type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          id?: string
+          report_id?: string | null
+          status?: string | null
+          transaction_type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          report_id?: string | null
+          status?: string | null
+          transaction_type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_transactions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
             referencedColumns: ["id"]
           },
         ]

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Camera, MapPin, Upload, Video, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Camera, MapPin, Upload, Video, AlertTriangle, CheckCircle2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,9 +10,10 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import { Constants } from "@/integrations/supabase/types";
+import { Link } from "react-router-dom";
 
 // Get violation types from Supabase types
-import { Constants } from "@/integrations/supabase/types";
 const violationTypes = Constants.public.Enums.violation_type;
 
 // Define a type for violationType based on the available options
@@ -53,6 +54,9 @@ const Report = () => {
   const [detectedViolations, setDetectedViolations] = useState<string[]>([]);
   const [detectionConfidence, setDetectionConfidence] = useState(0);
   const [autoDetectEnabled, setAutoDetectEnabled] = useState(true);
+  
+  // New state for subscription
+  const [isSubscribed, setIsSubscribed] = useState(false);
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -253,6 +257,28 @@ const Report = () => {
     }
   };
 
+  // Add new useEffect to check subscription status
+  useEffect(() => {
+    const checkSubscriptionStatus = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('is_subscribed')
+          .eq('id', user.id)
+          .single();
+          
+        if (error) throw error;
+        setIsSubscribed(data.is_subscribed || false);
+      } catch (error) {
+        console.error("Error checking subscription status:", error);
+      }
+    };
+    
+    checkSubscriptionStatus();
+  }, [user]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -299,9 +325,13 @@ const Report = () => {
         mediaUrl = publicUrlData.publicUrl;
         console.log("Media URL:", mediaUrl);
       }
+
+      // Generate a random challan amount between 500 and 5000 for demo purposes
+      // In a real application, this would be based on the violation type
+      const randomChallanAmount = Math.floor(Math.random() * 4500) + 500;
       
       // Insert report data into the database
-      const { error: insertError } = await supabase.from('reports').insert({
+      const { data: reportData, error: insertError } = await supabase.from('reports').insert({
         user_id: user.id,
         violation_type: violationType,
         description,
@@ -314,16 +344,28 @@ const Report = () => {
         ml_detected: detectedViolations.length > 0,
         ml_confidence: detectionConfidence,
         ml_violations: detectedViolations.length > 0 ? detectedViolations : null,
-      });
+        challan_amount: randomChallanAmount
+      }).select();
       
       if (insertError) {
         console.error("Insert error:", insertError);
         throw insertError;
       }
       
+      if (reportData && reportData.length > 0) {
+        // Create a challan payment record for the report
+        await supabase.from('challan_payments').insert({
+          report_id: reportData[0].id,
+          amount: randomChallanAmount,
+          status: 'pending'
+        });
+      }
+      
       toast({
         title: "Report submitted successfully!",
-        description: "You'll be notified when it's reviewed.",
+        description: isSubscribed ? 
+          "You'll be notified when it's verified and earn rewards when the challan is paid." : 
+          "You'll be notified when it's reviewed.",
       });
       
       navigate("/app");
@@ -417,6 +459,25 @@ const Report = () => {
         )}
         <h1 className="text-2xl font-bold">Report Violation</h1>
       </div>
+
+      {!isSubscribed && (
+        <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
+          <div className="flex items-start gap-3">
+            <div className="mt-1">
+              <Lock className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-medium text-blue-800">Subscribe to earn rewards</h3>
+              <p className="text-sm text-blue-700 mb-2">
+                Subscribe to earn 10% of the challan amount when your reports get verified and paid.
+              </p>
+              <Button asChild size="sm" variant="outline" className="bg-white">
+                <Link to="/app/subscription">View Subscription Plans</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {step === 1 ? (
         <div className="space-y-6">
@@ -556,7 +617,7 @@ const Report = () => {
               <Label htmlFor="violation-type">Violation Type</Label>
               <Select 
                 value={violationType} 
-                onValueChange={(value: ViolationType) => setViolationType(value)}
+                onValueChange={(value) => setViolationType(value as typeof violationTypes[number])}
                 required
               >
                 <SelectTrigger id="violation-type">
@@ -601,6 +662,17 @@ const Report = () => {
                 rows={3}
               />
             </div>
+            
+            {isSubscribed && (
+              <div className="bg-green-50 p-3 rounded-lg border border-green-100 mt-2">
+                <div className="flex items-center">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mr-2" />
+                  <p className="text-sm text-green-700">
+                    You'll earn 10% of the challan amount when this report is verified and paid
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <Button type="submit" className="w-full" size="lg" disabled={uploading}>

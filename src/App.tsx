@@ -14,6 +14,8 @@ import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import SubscriptionPlans from "./pages/SubscriptionPlans";
+import Wallet from "./pages/Wallet";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +37,8 @@ const App = () => (
                 <Route path="report" element={<Report />} />
                 <Route path="leaderboard" element={<Leaderboard />} />
                 <Route path="profile" element={<Profile />} />
+                <Route path="subscription" element={<SubscriptionPlans />} />
+                <Route path="wallet" element={<Wallet />} />
               </Route>
             </Route>
             
