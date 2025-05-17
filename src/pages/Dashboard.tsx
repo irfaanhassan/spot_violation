@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Plus, MapPin, ThumbsUp, ThumbsDown } from "lucide-react";
@@ -207,7 +208,7 @@ const Dashboard = () => {
                     </CardFooter>
                   </Card>
                   
-                  {/* Expanded report details */}
+                  {/* Render ReportDetail only when a report is selected */}
                   {selectedReport === report.id && (
                     <ReportDetail 
                       reportId={report.id}

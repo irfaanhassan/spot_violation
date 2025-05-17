@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { 
+  Dialog,
   DialogContent, 
   DialogHeader, 
   DialogTitle,
@@ -28,6 +29,7 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
   const [isUserSubscribed, setIsUserSubscribed] = useState(false);
   const [challanAmount, setChallanAmount] = useState<number>(0);
   const [imageError, setImageError] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(true);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -88,31 +90,15 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
     fetchReport();
   }, [reportId, user]);
 
-  if (loading) {
-    return (
-      <DialogContent className="sm:max-w-md">
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      </DialogContent>
-    );
-  }
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    onClose();
+  };
 
-  if (error) {
-    return (
-      <DialogContent className="sm:max-w-md">
-        <div className="py-6 text-center text-red-500">
-          <AlertCircle className="h-10 w-10 mx-auto mb-2" />
-          <p>{error}</p>
-        </div>
-      </DialogContent>
-    );
-  }
-
-  if (!report) return null;
+  if (!dialogOpen) return null;
 
   const getStatusBadge = () => {
-    switch (report.status) {
+    switch (report?.status) {
       case "verified":
         return <Badge className="bg-green-500">Verified</Badge>;
       case "rejected":
@@ -140,155 +126,187 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
     toast.error("Failed to load image. The image might be unavailable.");
   };
 
-  return (
-    <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
-      <DialogHeader>
-        <DialogTitle>Report Details</DialogTitle>
-      </DialogHeader>
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      );
+    }
 
-      <div className="space-y-4">
-        <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-          {report.image_url && !imageError ? (
-            <img
-              src={report.image_url}
-              alt="Violation evidence"
-              className="w-full h-full object-cover"
-              onError={handleImageError}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground">
-                {imageError ? "Image could not be loaded" : "No image available"}
-              </p>
+    if (error) {
+      return (
+        <div className="py-6 text-center text-red-500">
+          <AlertCircle className="h-10 w-10 mx-auto mb-2" />
+          <p>{error}</p>
+        </div>
+      );
+    }
+
+    if (!report) return null;
+
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>Report Details</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+            {report.image_url && !imageError ? (
+              <img
+                src={report.image_url}
+                alt="Violation evidence"
+                className="w-full h-full object-cover"
+                onError={handleImageError}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground">
+                  {imageError ? "Image could not be loaded" : "No image available"}
+                </p>
+              </div>
+            )}
+            <div className="absolute top-2 right-2">
+              {getStatusBadge()}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Violation Type</p>
+              <p className="font-medium">{report.violation_type}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Date Reported</p>
+              <p className="font-medium">{formatDate(report.created_at)}</p>
+            </div>
+          </div>
+
+          {report.number_plate && (
+            <div className="border rounded-lg p-3">
+              <div className="flex items-center">
+                <Car className="h-5 w-5 mr-2 text-muted-foreground" />
+                <span className="font-medium">Vehicle Details</span>
+              </div>
+              <div className="mt-2">
+                <p className="text-sm text-muted-foreground">Number Plate</p>
+                <p className="font-mono text-lg">{report.number_plate}</p>
+              </div>
             </div>
           )}
-          <div className="absolute top-2 right-2">
-            {getStatusBadge()}
-          </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">Violation Type</p>
-            <p className="font-medium">{report.violation_type}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Date Reported</p>
-            <p className="font-medium">{formatDate(report.created_at)}</p>
-          </div>
-        </div>
+          {report.location && (
+            <div className="flex items-start">
+              <MapPin className="h-5 w-5 text-muted-foreground mt-0.5 mr-2" />
+              <p>{report.location}</p>
+            </div>
+          )}
 
-        {report.number_plate && (
-          <div className="border rounded-lg p-3">
+          {report.description && (
+            <div>
+              <p className="text-sm text-muted-foreground">Additional Details</p>
+              <p className="mt-1">{report.description}</p>
+            </div>
+          )}
+
+          {/* AI Detection Results */}
+          {report.ml_detected && report.ml_violations && (
+            <div className="border rounded-lg p-3 bg-muted/20">
+              <p className="text-sm font-medium">AI Detection Results</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(report.ml_violations as string[]).map((violation, idx) => (
+                  <Badge key={idx} variant="outline">{violation}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Challan Amount */}
+          <div className="border rounded-lg p-3 bg-green-50 border-green-100">
             <div className="flex items-center">
-              <Car className="h-5 w-5 mr-2 text-muted-foreground" />
-              <span className="font-medium">Vehicle Details</span>
+              <Wallet className="h-5 w-5 mr-2 text-green-600" />
+              <span className="font-medium">Challan Details</span>
             </div>
             <div className="mt-2">
-              <p className="text-sm text-muted-foreground">Number Plate</p>
-              <p className="font-mono text-lg">{report.number_plate}</p>
+              <p className="text-sm text-green-700">Challan Amount</p>
+              <p className="font-medium text-lg">₹{report.challan_amount || "N/A"}</p>
+              {isUserSubscribed && report.status === 'verified' && (
+                <p className="text-xs text-green-600 mt-1 flex items-center">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  You'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
+                </p>
+              )}
             </div>
           </div>
-        )}
 
-        {report.location && (
-          <div className="flex items-start">
-            <MapPin className="h-5 w-5 text-muted-foreground mt-0.5 mr-2" />
-            <p>{report.location}</p>
-          </div>
-        )}
-
-        {report.description && (
-          <div>
-            <p className="text-sm text-muted-foreground">Additional Details</p>
-            <p className="mt-1">{report.description}</p>
-          </div>
-        )}
-
-        {/* AI Detection Results */}
-        {report.ml_detected && report.ml_violations && (
-          <div className="border rounded-lg p-3 bg-muted/20">
-            <p className="text-sm font-medium">AI Detection Results</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {(report.ml_violations as string[]).map((violation, idx) => (
-                <Badge key={idx} variant="outline">{violation}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Challan Amount */}
-        <div className="border rounded-lg p-3 bg-green-50 border-green-100">
-          <div className="flex items-center">
-            <Wallet className="h-5 w-5 mr-2 text-green-600" />
-            <span className="font-medium">Challan Details</span>
-          </div>
-          <div className="mt-2">
-            <p className="text-sm text-green-700">Challan Amount</p>
-            <p className="font-medium text-lg">₹{report.challan_amount || "N/A"}</p>
-            {isUserSubscribed && report.status === 'verified' && (
-              <p className="text-xs text-green-600 mt-1 flex items-center">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
-                You'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
-              </p>
-            )}
+          <div className="pt-2 border-t">
+            <VoteButtons
+              reportId={report.id}
+              initialUpvotes={0}
+              initialDownvotes={0}
+              userVote={userVote}
+              onVoteChange={handleVoteChange}
+            />
           </div>
         </div>
 
-        <div className="pt-2 border-t">
-          <VoteButtons
-            reportId={report.id}
-            initialUpvotes={0}
-            initialDownvotes={0}
-            userVote={userVote}
-            onVoteChange={handleVoteChange}
-          />
-        </div>
-      </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={handleCloseDialog}>
+            Close
+          </Button>
+        </DialogFooter>
 
-      <DialogFooter>
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
-      </DialogFooter>
-
-      {/* Reward Popup */}
-      {showRewardPopup && report.status === 'verified' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 animate-in fade-in zoom-in">
-            <div className="flex justify-center mb-4">
-              <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
-                <Check className="h-8 w-8 text-green-600" />
-              </div>
-            </div>
-            <h2 className="text-xl font-bold text-center mb-2">Report Verified!</h2>
-            <p className="text-center text-muted-foreground mb-4">
-              Your report has been verified. You will receive your reward once the violator pays the challan.
-            </p>
-            {isUserSubscribed ? (
-              <div className="bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
-                <p className="text-sm text-center text-green-700">
-                  As a subscriber, you'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
-                </p>
-              </div>
-            ) : (
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
-                <p className="text-sm text-center text-blue-700">
-                  Subscribe to earn rewards on your verified reports
-                </p>
-                <div className="flex justify-center mt-2">
-                  <Button asChild size="sm" variant="outline" className="bg-white">
-                    <Link to="/app/subscription">Subscribe Now</Link>
-                  </Button>
+        {/* Reward Popup */}
+        {showRewardPopup && report.status === 'verified' && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 animate-in fade-in zoom-in">
+              <div className="flex justify-center mb-4">
+                <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
+                  <Check className="h-8 w-8 text-green-600" />
                 </div>
               </div>
-            )}
-            <Button className="w-full" onClick={() => setShowRewardPopup(false)}>
-              Got it
-            </Button>
+              <h2 className="text-xl font-bold text-center mb-2">Report Verified!</h2>
+              <p className="text-center text-muted-foreground mb-4">
+                Your report has been verified. You will receive your reward once the violator pays the challan.
+              </p>
+              {isUserSubscribed ? (
+                <div className="bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-center text-green-700">
+                    As a subscriber, you'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-center text-blue-700">
+                    Subscribe to earn rewards on your verified reports
+                  </p>
+                  <div className="flex justify-center mt-2">
+                    <Button asChild size="sm" variant="outline" className="bg-white">
+                      <Link to="/app/subscription">Subscribe Now</Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <Button className="w-full" onClick={() => setShowRewardPopup(false)}>
+                Got it
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
-    </DialogContent>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <Dialog open={dialogOpen} onOpenChange={(open) => {
+      setDialogOpen(open);
+      if (!open) onClose();
+    }}>
+      <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
+        {renderContent()}
+      </DialogContent>
+    </Dialog>
   );
 };
