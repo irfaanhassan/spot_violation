@@ -19,9 +19,6 @@ const violationTypes = Constants.public.Enums.violation_type;
 // Define a type for violationType based on the available options
 type ViolationType = typeof violationTypes[number];
 
-// Define media type
-type MediaType = "image" | "video";
-
 // Declare Google Maps types
 declare global {
   interface Window {
@@ -37,7 +34,6 @@ declare global {
 
 const Report = () => {
   const [step, setStep] = useState(1);
-  const [mediaType, setMediaType] = useState<MediaType>("image");
   const [media, setMedia] = useState<string | null>(null);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [location, setLocation] = useState("Getting your location...");
@@ -49,16 +45,16 @@ const Report = () => {
   const [mapLoaded, setMapLoaded] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   
-  // New states for ML detection
+  // States for ML detection
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectedViolations, setDetectedViolations] = useState<string[]>([]);
   const [detectionConfidence, setDetectionConfidence] = useState(0);
   const [autoDetectEnabled, setAutoDetectEnabled] = useState(true);
   
-  // New state for subscription
+  // State for subscription
   const [isSubscribed, setIsSubscribed] = useState(false);
   
-  // New state for auto-verification
+  // State for auto-verification
   const [autoVerifyEnabled, setAutoVerifyEnabled] = useState(true);
   const [highConfidenceDetection, setHighConfidenceDetection] = useState(false);
   
@@ -68,36 +64,24 @@ const Report = () => {
 
   // Load Google Maps script
   useEffect(() => {
-    const loadGoogleMapsScript = () => {
-      // Check if the script is already loaded
-      if (window.google?.maps) {
-        setMapLoaded(true);
-        return;
-      }
-      
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAJZwzmilDdDMv0ogSAEBxPsJxcJMMNz-4&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      script.onload = () => {
-        console.log("Google Maps loaded successfully");
-        setMapLoaded(true);
-      };
-      script.onerror = (error) => {
-        console.error("Error loading Google Maps:", error);
-      };
-      document.head.appendChild(script);
+    // Check if the script is already loaded
+    if (window.google?.maps) {
+      setMapLoaded(true);
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAJZwzmilDdDMv0ogSAEBxPsJxcJMMNz-4&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      console.log("Google Maps loaded successfully");
+      setMapLoaded(true);
     };
-
-    loadGoogleMapsScript();
-
-    return () => {
-      // Clean up script if component unmounts before script loads
-      const script = document.querySelector('script[src*="maps.googleapis.com"]');
-      if (script) {
-        document.head.removeChild(script);
-      }
+    script.onerror = (error) => {
+      console.error("Error loading Google Maps:", error);
     };
+    document.head.appendChild(script);
   }, []);
 
   // Get user's location when component mounts
@@ -142,7 +126,6 @@ const Report = () => {
       
       // Check if the file is a video or an image
       const fileType = file.type.split('/')[0];
-      setMediaType(fileType as MediaType);
       
       if (fileType === "video") {
         // Create a URL for the video file
@@ -174,7 +157,7 @@ const Report = () => {
     document.getElementById("media-upload")?.click();
   };
   
-  // New function to detect violations using ML model
+  // Function to detect violations using ML model
   const detectViolations = async (imageUrl?: string) => {
     if (!media && !imageUrl) {
       toast({
@@ -221,17 +204,23 @@ const Report = () => {
         throw new Error("Could not get media URL");
       }
       
+      console.log("Sending media to detect-violations function:", mediaUrl);
+      
       // Call the edge function to detect violations
+      const isImage = mediaFile?.type.startsWith('image/') || imageUrl?.startsWith('data:image/');
       const { data, error } = await supabase.functions.invoke('detect-violations', {
         body: {
-          imageUrl: mediaType === 'image' ? mediaUrl : null,
-          videoUrl: mediaType === 'video' ? mediaUrl : null,
+          imageUrl: isImage ? mediaUrl : null,
+          videoUrl: isImage ? null : mediaUrl,
         }
       });
       
       if (error) {
+        console.error("Edge function error:", error);
         throw error;
       }
+      
+      console.log("Detection response:", data);
       
       // Update the UI with detection results
       if (data.detectedViolations && Array.isArray(data.detectedViolations)) {
@@ -240,15 +229,31 @@ const Report = () => {
         setHighConfidenceDetection(data.shouldAutoVerify || false);
         
         // If violations detected, update the form
-        if (data.detectedViolations.length > 0 && data.detectedViolations.includes(violationType)) {
-          // Set the first detected violation as the selected type
-          setViolationType(data.detectedViolations[0] as ViolationType);
+        if (data.detectedViolations.length > 0) {
+          // Find if any of the detected violations match our violation types
+          const matchedViolation = data.detectedViolations.find((v: string) => 
+            violationTypes.some(type => v.includes(type))
+          );
+          
+          if (matchedViolation) {
+            // Set the matched violation as the selected type
+            const validViolation = violationTypes.find(type => 
+              matchedViolation.includes(type)
+            );
+            
+            if (validViolation) {
+              setViolationType(validViolation as ViolationType);
+            }
+          } else if (data.detectedViolations.length > 0) {
+            // If no direct match, default to the first option
+            setViolationType(violationTypes[0]);
+          }
         }
       }
       
       toast({
         title: data.detectedViolations.length > 0 ? "Violations Detected!" : "No Violations Detected",
-        description: data.message,
+        description: data.message || "Analysis complete",
       });
       
     } catch (error: any) {
@@ -263,7 +268,7 @@ const Report = () => {
     }
   };
 
-  // Add new useEffect to check subscription status
+  // Add useEffect to check subscription status
   useEffect(() => {
     const checkSubscriptionStatus = async () => {
       if (!user) return;
@@ -339,7 +344,20 @@ const Report = () => {
       // Determine if the report should be auto-verified based on ML confidence
       const initialStatus = autoVerifyEnabled && highConfidenceDetection ? 'verified' : 'pending';
       
-      // Insert report data into the database - removed media_type field
+      console.log("Submitting report with data:", {
+        violation_type: violationType,
+        description,
+        number_plate: numberPlate,
+        location,
+        image_url: mediaUrl,
+        ml_detected: detectedViolations.length > 0,
+        ml_confidence: detectionConfidence,
+        ml_violations: detectedViolations,
+        challan_amount: randomChallanAmount,
+        status: initialStatus
+      });
+      
+      // Insert report data into the database
       const { data: reportData, error: insertError } = await supabase.from('reports').insert({
         user_id: user.id,
         violation_type: violationType,
@@ -456,11 +474,11 @@ const Report = () => {
   useEffect(() => {
     return () => {
       // Clean up any created object URLs
-      if (media && mediaType === "video") {
+      if (media && mediaFile?.type.startsWith('video/')) {
         URL.revokeObjectURL(media);
       }
     };
-  }, [media, mediaType]);
+  }, [media, mediaFile]);
 
   return (
     <div className="px-4 py-6 pb-20">
@@ -501,12 +519,12 @@ const Report = () => {
         <div className="space-y-6">
           <div className="text-center">
             <p className="text-muted-foreground mb-6">
-              Start by taking a photo/video or uploading evidence of the traffic violation
+              Start by taking a photo or uploading evidence of the traffic violation
             </p>
             
             {media ? (
               <div className="relative mb-4">
-                {mediaType === "image" ? (
+                {mediaFile?.type.startsWith('image/') ? (
                   <img 
                     src={media} 
                     alt="Violation evidence" 
@@ -523,7 +541,7 @@ const Report = () => {
                   </video>
                 )}
                 <div className="absolute bottom-3 right-3 flex gap-2">
-                  {mediaType === "image" && !isDetecting && (
+                  {mediaFile?.type.startsWith('image/') && !isDetecting && (
                     <Button
                       variant="secondary"
                       size="sm"
@@ -542,7 +560,7 @@ const Report = () => {
                       setMedia(null);
                       setMediaFile(null);
                       setDetectedViolations([]);
-                      if (mediaType === "video" && media) {
+                      if (mediaFile?.type.startsWith('video/') && media) {
                         URL.revokeObjectURL(media);
                       }
                     }}
@@ -653,7 +671,9 @@ const Report = () => {
                 </SelectContent>
               </Select>
               
-              {detectedViolations.length > 0 && detectedViolations.includes(violationType) && (
+              {detectedViolations.length > 0 && detectedViolations.some(v => 
+                v.includes(violationType) || violationType.includes(v)
+              ) && (
                 <p className="text-xs text-green-600 flex items-center mt-1">
                   <CheckCircle2 className="h-3 w-3 mr-1" /> 
                   AI verified this violation type

@@ -1,7 +1,6 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Plus, MapPin, ThumbsUp, ThumbsDown } from "lucide-react";
+import { AlertTriangle, Plus, MapPin, ThumbsUp, ThumbsDown, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -138,7 +137,7 @@ const Dashboard = () => {
         <h1 className="text-2xl font-bold">Traffic Reports</h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => navigate("/app/wallet")} className="hidden md:flex">
-            My Wallet
+            <Wallet className="h-5 w-5 mr-2" /> My Wallet
           </Button>
           <Button onClick={() => navigate("/app/report")}>
             <Plus className="h-5 w-5 mr-2" /> Report
@@ -213,7 +212,7 @@ const Dashboard = () => {
                     </CardFooter>
                   </Card>
                   
-                  {/* We're showing the ReportDetail outside the component to avoid the Dialog nesting issue */}
+                  {/* Pass the report ID to ReportDetail and render it only when selected */}
                   {selectedReport === report.id && (
                     <ReportDetail 
                       reportId={report.id}

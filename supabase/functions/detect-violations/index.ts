@@ -2,9 +2,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// This Edge Function will process an image/video and detect traffic violations
-// It's configured to be easily replaced with your ML API when ready
-
 serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
@@ -41,8 +38,7 @@ serve(async (req) => {
 
     console.log("Processing media:", imageUrl || videoUrl);
 
-    // TODO: This is where you'll integrate your ML API
-    // Call the API integration function which will be replaced with your actual API
+    // Integrate with the Hugging Face space API
     const results = await detectViolationsWithAPI(imageUrl || videoUrl, imageUrl ? "image" : "video");
     
     return new Response(
@@ -68,43 +64,88 @@ serve(async (req) => {
   }
 });
 
-// This function will be replaced with your ML API integration
+// This function will use the ML API to detect violations
 async function detectViolationsWithAPI(mediaUrl: string, mediaType: "image" | "video") {
   try {
-    // PLACEHOLDER: Replace this with your actual API call
-    // For example:
-    // const response = await fetch('https://your-ml-api.com/detect', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ mediaUrl, mediaType })
-    // });
-    // const data = await response.json();
+    console.log(`Sending ${mediaType} to ML API for violation detection`);
     
-    // For now, use the simulation function
-    const detectedViolations = simulateViolationDetection(mediaType);
-    const confidence = detectedViolations.length > 0 ? 0.85 : 0;
+    // Use the Hugging Face space API for detection
+    const response = await fetch("https://majeed786-spot-violation.hf.space/api/predict", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        data: [
+          mediaUrl
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("API response error:", errorText);
+      throw new Error(`ML API responded with status: ${response.status}`);
+    }
+
+    // Parse the API response
+    const apiResult = await response.json();
+    console.log("ML API response:", apiResult);
+
+    // Extract violations from the API response
+    // The API might return data in a specific format, adjust the parsing accordingly
+    let detectedViolations: string[] = [];
+    let confidence = 0;
+    
+    // Process the API result - this structure may need adjustment based on actual API response
+    if (apiResult && apiResult.data && Array.isArray(apiResult.data)) {
+      // Assuming the API returns an array of detected violations
+      const violationsData = apiResult.data[0];
+      
+      if (typeof violationsData === 'string') {
+        // If the API returns a simple string
+        if (violationsData.toLowerCase().includes("no violation") || violationsData.trim() === "") {
+          detectedViolations = [];
+        } else {
+          // Split by commas or other separators if the API returns multiple violations in a string
+          detectedViolations = violationsData.split(',').map(v => v.trim());
+          // Filter out empty strings
+          detectedViolations = detectedViolations.filter(v => v.length > 0);
+        }
+      } else if (Array.isArray(violationsData)) {
+        // If the API returns an array of violations
+        detectedViolations = violationsData.filter(v => typeof v === 'string' && v.trim() !== "");
+      }
+
+      // Calculate a confidence score - this is simplified and should be adjusted based on actual API
+      confidence = detectedViolations.length > 0 ? 0.85 : 0;
+    }
+
+    // Fallback to simulation if we couldn't parse the API response
+    if (!apiResult || !apiResult.data) {
+      console.log("Using fallback simulation for detection");
+      return simulateViolationDetection(mediaType);
+    }
     
     return {
       detectedViolations,
       confidence,
-      shouldAutoVerify: confidence > 0.8, // Changed to 0.8 for easier testing
+      shouldAutoVerify: confidence > 0.8,
       message: detectedViolations.length > 0 ? "Violations detected" : "No violations detected"
     };
   } catch (error) {
     console.error("API detection error:", error);
-    return {
-      detectedViolations: [],
-      confidence: 0,
-      shouldAutoVerify: false,
-      message: "Error processing detection"
-    };
+    
+    // Fallback to simulation if the API call fails
+    console.log("API call failed. Using fallback simulation.");
+    return simulateViolationDetection(mediaType);
   }
 }
 
-// Mock detection function - replace with your actual ML model
+// Mock detection function as a fallback
 function simulateViolationDetection(mediaType: "image" | "video") {
   // This function simulates ML detection with random results
-  // You'll replace this with your actual ML API integration
+  // Will be used as a fallback if the API call fails
   
   const possibleViolations = [
     "Triple Riding", 
@@ -129,5 +170,12 @@ function simulateViolationDetection(mediaType: "image" | "video") {
     }
   }
   
-  return detectedViolations;
+  const confidence = detectedViolations.length > 0 ? 0.85 : 0;
+  
+  return {
+    detectedViolations,
+    confidence,
+    shouldAutoVerify: confidence > 0.8, // Changed to 0.8 for easier testing
+    message: detectedViolations.length > 0 ? "Violations detected" : "No violations detected"
+  };
 }

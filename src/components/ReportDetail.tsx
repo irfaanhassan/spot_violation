@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { AlertCircle, MapPin, Car, Check, X, Clock, Wallet, CheckCircle2 } from "lucide-react";
+import { AlertCircle, MapPin, Car, Check, Clock, Wallet, CheckCircle2 } from "lucide-react";
 import { VoteButtons } from "./VoteButtons";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -94,8 +94,6 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
     setDialogOpen(false);
     onClose();
   };
-
-  if (!dialogOpen) return null;
 
   const getStatusBadge = () => {
     switch (report?.status) {
@@ -220,6 +218,11 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
                   <Badge key={idx} variant="outline">{violation}</Badge>
                 ))}
               </div>
+              {report.ml_confidence && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Detection confidence: {Math.round(report.ml_confidence * 100)}%
+                </p>
+              )}
             </div>
           )}
           
@@ -262,13 +265,15 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
   };
 
   return (
-    <Dialog open={dialogOpen} onOpenChange={(open) => {
-      setDialogOpen(open);
-      if (!open) onClose();
-    }}>
-      <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
-        {renderContent()}
-      </DialogContent>
+    <>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) onClose();
+      }}>
+        <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
+          {renderContent()}
+        </DialogContent>
+      </Dialog>
       
       {/* Reward Popup */}
       {showRewardPopup && report?.status === 'verified' && (
@@ -307,6 +312,6 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
           </DialogContent>
         </Dialog>
       )}
-    </Dialog>
+    </>
   );
 };
