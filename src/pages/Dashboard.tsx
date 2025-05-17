@@ -136,9 +136,14 @@ const Dashboard = () => {
     <div className="px-4 py-6 pb-20">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Traffic Reports</h1>
-        <Button onClick={() => navigate("/app/report")}>
-          <Plus className="h-5 w-5 mr-2" /> Report
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate("/app/wallet")} className="hidden md:flex">
+            My Wallet
+          </Button>
+          <Button onClick={() => navigate("/app/report")}>
+            <Plus className="h-5 w-5 mr-2" /> Report
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
@@ -208,7 +213,7 @@ const Dashboard = () => {
                     </CardFooter>
                   </Card>
                   
-                  {/* Render ReportDetail only when a report is selected */}
+                  {/* We're showing the ReportDetail outside the component to avoid the Dialog nesting issue */}
                   {selectedReport === report.id && (
                     <ReportDetail 
                       reportId={report.id}

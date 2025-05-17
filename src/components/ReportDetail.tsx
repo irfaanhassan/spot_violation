@@ -257,44 +257,6 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
             Close
           </Button>
         </DialogFooter>
-
-        {/* Reward Popup */}
-        {showRewardPopup && report.status === 'verified' && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 animate-in fade-in zoom-in">
-              <div className="flex justify-center mb-4">
-                <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <Check className="h-8 w-8 text-green-600" />
-                </div>
-              </div>
-              <h2 className="text-xl font-bold text-center mb-2">Report Verified!</h2>
-              <p className="text-center text-muted-foreground mb-4">
-                Your report has been verified. You will receive your reward once the violator pays the challan.
-              </p>
-              {isUserSubscribed ? (
-                <div className="bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-center text-green-700">
-                    As a subscriber, you'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-center text-blue-700">
-                    Subscribe to earn rewards on your verified reports
-                  </p>
-                  <div className="flex justify-center mt-2">
-                    <Button asChild size="sm" variant="outline" className="bg-white">
-                      <Link to="/app/subscription">Subscribe Now</Link>
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <Button className="w-full" onClick={() => setShowRewardPopup(false)}>
-                Got it
-              </Button>
-            </div>
-          </div>
-        )}
       </>
     );
   };
@@ -307,6 +269,44 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
       <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
         {renderContent()}
       </DialogContent>
+      
+      {/* Reward Popup */}
+      {showRewardPopup && report?.status === 'verified' && (
+        <Dialog open={showRewardPopup} onOpenChange={setShowRewardPopup}>
+          <DialogContent className="max-w-md">
+            <div className="flex justify-center mb-4">
+              <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
+                <Check className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+            <h2 className="text-xl font-bold text-center mb-2">Report Verified!</h2>
+            <p className="text-center text-muted-foreground mb-4">
+              Your report has been verified. You will receive your reward once the violator pays the challan.
+            </p>
+            {isUserSubscribed ? (
+              <div className="bg-green-50 border border-green-100 rounded-lg p-3 mb-4">
+                <p className="text-sm text-center text-green-700">
+                  As a subscriber, you'll earn ₹{((report.challan_amount || 0) * 0.1).toFixed(2)} when the challan is paid
+                </p>
+              </div>
+            ) : (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+                <p className="text-sm text-center text-blue-700">
+                  Subscribe to earn rewards on your verified reports
+                </p>
+                <div className="flex justify-center mt-2">
+                  <Button asChild size="sm" variant="outline" className="bg-white">
+                    <Link to="/app/subscription">Subscribe Now</Link>
+                  </Button>
+                </div>
+              </div>
+            )}
+            <Button className="w-full" onClick={() => setShowRewardPopup(false)}>
+              Got it
+            </Button>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 };

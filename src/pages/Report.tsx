@@ -339,7 +339,7 @@ const Report = () => {
       // Determine if the report should be auto-verified based on ML confidence
       const initialStatus = autoVerifyEnabled && highConfidenceDetection ? 'verified' : 'pending';
       
-      // Insert report data into the database
+      // Insert report data into the database - removed media_type field
       const { data: reportData, error: insertError } = await supabase.from('reports').insert({
         user_id: user.id,
         violation_type: violationType,
@@ -349,7 +349,6 @@ const Report = () => {
         latitude: coordinates?.lat,
         longitude: coordinates?.lng,
         image_url: mediaUrl,
-        media_type: mediaType,
         ml_detected: detectedViolations.length > 0,
         ml_confidence: detectionConfidence,
         ml_violations: detectedViolations.length > 0 ? detectedViolations : null,
