@@ -44,8 +44,33 @@ const WalletPage = () => {
           .eq('id', user.id)
           .single();
 
-        if (profileError) throw profileError;
-        setProfile(profileData);
+        if (profileError) {
+          console.error("Profile fetch error:", profileError);
+          if (profileError.code === "PGRST116") {
+            // If profile not found, create one
+            await supabase
+              .from('profiles')
+              .insert({
+                id: user.id,
+                username: user.email,
+                total_earnings: 0,
+                is_subscribed: false,
+                plan_name: null,
+                subscription_expires_at: null
+              });
+              
+            setProfile({
+              total_earnings: 0,
+              is_subscribed: false,
+              plan_name: null,
+              subscription_expires_at: null
+            });
+          } else {
+            throw profileError;
+          }
+        } else {
+          setProfile(profileData);
+        }
 
         // Fetch transaction history
         const { data: transactionsData, error: transactionsError } = await supabase
@@ -54,7 +79,11 @@ const WalletPage = () => {
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
-        if (transactionsError) throw transactionsError;
+        if (transactionsError) {
+          console.error("Transactions fetch error:", transactionsError);
+          throw transactionsError;
+        }
+        
         setTransactions(transactionsData || []);
       } catch (error) {
         console.error("Error fetching wallet data:", error);

@@ -14,6 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AlertCircle, MapPin, Car, Check, X, Clock, Wallet, CheckCircle2 } from "lucide-react";
 import { VoteButtons } from "./VoteButtons";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose: () => void }) => {
   const [report, setReport] = useState<any>(null);
@@ -26,6 +27,7 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
   const [showRewardPopup, setShowRewardPopup] = useState(false);
   const [isUserSubscribed, setIsUserSubscribed] = useState(false);
   const [challanAmount, setChallanAmount] = useState<number>(0);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -42,6 +44,8 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
           .single();
 
         if (error) throw error;
+        
+        console.log("Report data:", data);
         setReport(data);
         setChallanAmount(data.challan_amount || 0);
 
@@ -49,8 +53,6 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
         if (data.status === 'verified') {
           setShowRewardPopup(true);
         }
-
-        setLoading(false);
 
         // Check user votes
         if (user) {
@@ -74,9 +76,12 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
             
           setIsUserSubscribed(userData?.is_subscribed || false);
         }
-      } catch (error) {
+        
+        setLoading(false);
+      } catch (error: any) {
         console.error("Error loading report:", error);
         setError("Failed to load report details");
+        setLoading(false);
       }
     };
 
@@ -129,6 +134,12 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
     setUserVote(newVote);
   };
 
+  const handleImageError = () => {
+    console.log("Image failed to load");
+    setImageError(true);
+    toast.error("Failed to load image. The image might be unavailable.");
+  };
+
   return (
     <DialogContent className="sm:max-w-lg overflow-y-auto max-h-[90vh]">
       <DialogHeader>
@@ -137,15 +148,18 @@ export const ReportDetail = ({ reportId, onClose }: { reportId: string; onClose:
 
       <div className="space-y-4">
         <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-          {report.image_url ? (
+          {report.image_url && !imageError ? (
             <img
               src={report.image_url}
               alt="Violation evidence"
               className="w-full h-full object-cover"
+              onError={handleImageError}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground">No image available</p>
+              <p className="text-muted-foreground">
+                {imageError ? "Image could not be loaded" : "No image available"}
+              </p>
             </div>
           )}
           <div className="absolute top-2 right-2">

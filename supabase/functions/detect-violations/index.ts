@@ -69,27 +69,36 @@ serve(async (req) => {
 });
 
 // This function will be replaced with your ML API integration
-// For now it uses the simulation function but is structured to be easily replaced
 async function detectViolationsWithAPI(mediaUrl: string, mediaType: "image" | "video") {
-  // PLACEHOLDER: Replace this with your actual API call
-  // For example:
-  // const response = await fetch('https://your-ml-api.com/detect', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ mediaUrl, mediaType })
-  // });
-  // const data = await response.json();
-  
-  // For now, use the simulation function
-  const detectedViolations = simulateViolationDetection(mediaType);
-  const confidence = detectedViolations.length > 0 ? 0.85 : 0;
-  
-  return {
-    detectedViolations,
-    confidence,
-    shouldAutoVerify: confidence > 0.95, // New field to indicate if confidence is high enough for auto verification
-    message: detectedViolations.length > 0 ? "Violations detected" : "No violations detected"
-  };
+  try {
+    // PLACEHOLDER: Replace this with your actual API call
+    // For example:
+    // const response = await fetch('https://your-ml-api.com/detect', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ mediaUrl, mediaType })
+    // });
+    // const data = await response.json();
+    
+    // For now, use the simulation function
+    const detectedViolations = simulateViolationDetection(mediaType);
+    const confidence = detectedViolations.length > 0 ? 0.85 : 0;
+    
+    return {
+      detectedViolations,
+      confidence,
+      shouldAutoVerify: confidence > 0.8, // Changed to 0.8 for easier testing
+      message: detectedViolations.length > 0 ? "Violations detected" : "No violations detected"
+    };
+  } catch (error) {
+    console.error("API detection error:", error);
+    return {
+      detectedViolations: [],
+      confidence: 0,
+      shouldAutoVerify: false,
+      message: "Error processing detection"
+    };
+  }
 }
 
 // Mock detection function - replace with your actual ML model
@@ -101,7 +110,9 @@ function simulateViolationDetection(mediaType: "image" | "video") {
     "Triple Riding", 
     "No Helmet", 
     "Wrong Side", 
-    "Signal Jumping"
+    "Signal Jump",
+    "Overloading",
+    "Others"
   ];
   
   // For demo purposes: randomly detect 0-2 violations

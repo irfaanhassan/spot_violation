@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +27,32 @@ export function VoteButtons({
   const [isVoting, setIsVoting] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Fetch actual vote counts when component mounts
+  useEffect(() => {
+    const fetchVoteCounts = async () => {
+      try {
+        const { data: votesData, error } = await supabase
+          .from('report_votes')
+          .select('vote_type')
+          .eq('report_id', reportId);
+          
+        if (error) throw error;
+        
+        if (votesData) {
+          const upCount = votesData.filter(v => v.vote_type === 'upvote').length;
+          const downCount = votesData.filter(v => v.vote_type === 'downvote').length;
+          
+          setUpvotes(upCount);
+          setDownvotes(downCount);
+        }
+      } catch (error) {
+        console.error('Error fetching vote counts:', error);
+      }
+    };
+    
+    fetchVoteCounts();
+  }, [reportId]);
 
   const handleVote = async (voteType: 'upvote' | 'downvote') => {
     if (!user) {

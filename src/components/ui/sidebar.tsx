@@ -24,14 +24,14 @@ const Sidebar = () => {
       icon: <Trophy className="h-5 w-5" />
     },
     {
+      title: "Wallet",
+      path: "/app/wallet",
+      icon: <Wallet className="h-5 w-5" />
+    },
+    {
       title: "Subscription Plans",
       path: "/app/subscription",
       icon: <DollarSign className="h-5 w-5" />
-    },
-    {
-      title: "My Wallet",
-      path: "/app/wallet",
-      icon: <Wallet className="h-5 w-5" />
     },
     {
       title: "Profile",
